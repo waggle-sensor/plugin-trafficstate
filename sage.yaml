@@ -15,5 +15,7 @@ resources:
     view: "road"
     min_resolution: "600x800"
 inputs:
+  - id: "interval"
+    type: "int"
   - id: "sampling-interval"
     type: "int"

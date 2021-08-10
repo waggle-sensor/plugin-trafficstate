@@ -1,177 +1,223 @@
-from yolov4_plugin import *
-from deepsort_plugin import *
+import cv2
+import numpy as np
+import time
+
+from tool.utils import *
+from tool.torch_utils import do_detect
+from tool.darknet2pytorch import Darknet
+
+from deep_sort.deepsort import *
+import torch
 
 import argparse
-import numpy as np
-import cv2
-import time
-from time import sleep
-from multiprocessing import Process, Queue, Value
-
-#import waggle.plugin as plugin
 
 
-def run_videocapture(video_queue):
-    print('hi')
-    designated_fps = 20.0
-    cap = cv2.VideoCapture(0)
+class yolov4_trck():
+    def __init__(self, use_cuda, cfgfile='yolov4.cfg', weightfile='yolov4.weights'):
+        self.m = Darknet(cfgfile)
+        self.m.load_weights(weightfile)
 
-    # Define the codec and create VideoWriter object
-    fourcc = cv2.VideoWriter_fourcc(*'XVID')
-    outname = time.time() + '.avi'
-    out = cv2.VideoWriter(outname,fourcc, designated_fps, (1194,670))
-    video_queue.put(outname)
+        if use_cuda:
+            self.m.cuda().eval()
+        else:
+            self.m.eval()
 
-    print(cap.isOpened())
-    count = 0
-    while(cap.isOpened()):
-        ret, frame = cap.read()
-        count += 1
-        print(count)
-        if ret == True:
-            frame = cv2.flip(frame,0)
+        self.use_cuda = use_cuda
 
-            # write the flipped frame
-            out.write(frame)
-
-        if count == 1*designated_fps:  ## if the video has been recorded for 1 sec
-            break
-
-    # Release everything if job is finished
-    cap.release()
-    out.release()
-
-
-def run_yolov4(kill_queue, output_queue, video_queue, args):
-    video_path=args.video
-#     video_path = video_queue.get()
-
-    cap = cv2.VideoCapture(video_path)
-#     cvfps = cap.get(cv2.CAP_PROP_FPS)
-#     cvfps = 30
-
-    width  = cap.get(cv2.CAP_PROP_FRAME_WIDTH)  # float
-    height = cap.get(cv2.CAP_PROP_FRAME_HEIGHT) # float
-
-    m = call_yolov4(args)
-    ODetect = yolov4_trck(m)
-
-    namesfile='detection/coco.names'
-    num_classes = m.num_classes
-    class_names = load_class_names(namesfile)
-
-    while kill_queue.empty():
-        if output_queue.full():
-            sleep(0.1)
-            continue
-
-        ret, frame = cap.read()
-#         print('>>>>>> ret: ', ret)
+    def run_yolov4(self, frame, ret):
         if ret == False:
-            break
-        ret, frame = cap.read()
-#         print('>>>>>> ret: ', ret)
+            print(ret, 'no_frame')
+            return
+        else:
+            frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+            sized = cv2.resize(frame, (512, 512))
+            sized = cv2.cvtColor(sized, cv2.COLOR_BGR2RGB)
+
+            #### Start detection using do_detect() function
+    #             start = time.time()
+            ######### output must be boxes[0], which contains tbrl, confidence level, and class number
+            boxes = do_detect(self.m, sized, 0.4, 0.6, self.use_cuda)
+    #             print(type(boxes), len(boxes[0]), ': number of detected cars', boxes[0])
+    #             finish = time.time()
+    #             print('yolo elapsed in: %f sec' % (finish - start))
+            return boxes[0]
+
+
+def call_deepsort(use_cuda, wt_path='model640.pt'):
+    if use_cuda:
+        m_deepsort = torch.load(wt_path)
+        m_deepsort.cuda().eval()
+    else:
+        m_deepsort = torch.load(wt_path, map_location=torch.device('cpu'))
+        m_deepsort.eval()
+
+    return m_deepsort
+
+
+class run_class():
+    def __init__(self, DSort, road, fps, road_length):
+        self.DSort = DSort
+
+        self.outgoing = []
+        self.incoming = []
+
+        self.out_occupancy_area = 0
+        self.in_occupancy_area = 0
+        self.out_occupancy = 0
+        self.in_occupancy = 0
+
+        self.speed_outgoing = {}
+        self.speed_incoming = {}
+        self.fps = fps
+        self.out_speed = {}
+        self.in_speed = {}
+
+        self.d = road_length
+        self.road = road
+
+
+    def flow(self, t, b, r, l, id_num):
+        if t < 540 and b > 540:     ### if a box acrosses the bottom (yellow) line
+            if r < 540:             ### and the box on the left side (enter RoI)
+                if id_num not in self.outgoing:
+                    self.outgoing.append(id_num)
+            elif l > 670:           ### and the box on the right side (exit RoI)
+                if id_num not in self.incoming:
+                    self.incoming.append(id_num)
+
+
+
+    def density(self, t, b, r, l, outclass):
+        if t < 540 and b > 340:
+            if r < 540:
+                if outclass == 2:  ### car
+                    self.out_occupancy_area += 4.5*1.7
+                    self.out_occupancy += 4.5
+                elif outclass == 5:  ### bus
+                    self.out_occupancy_area += 13*2.55
+                    self.out_occupancy += 13
+                elif outclass == 7:  ### truck
+                    self.out_occupancy_area += 5.5*2
+                    self.out_occupancy += 5.5
+
+            elif l > 670:
+                if outclass == 2:  ### car
+                    self.in_occupancy_area += 4.5*1.7
+                    self.in_occupancy += 4.5
+                elif outclass == 5:  ### bus
+                    self.in_occupancy_area += 13*2.55
+                    self.in_occupancy += 13
+                elif outclass == 7:  ### truck
+                    self.in_occupancy_area += 5.5*2
+                    self.in_occupancy += 5.5
+
+
+    def speed(self, t, b, r, l, id_num):
+        if t < 540 and b > 540:     ### yellow line
+            if r < 540:             ### come into yellow line
+                if id_num not in self.speed_outgoing:
+                    self.speed_outgoing[id_num] = [1]    ### the vehicle is getting further, and firstly captured
+                else:
+                    self.speed_outgoing[id_num][0] += 1   ### the vehicle is gettig further, and captured multiple times
+            elif l > 670:           ### get out from yellow line
+                if id_num not in self.speed_incoming:   ### the vehicle is getting closer, and don't know when it first get into the RoI
+                    pass
+                elif len(self.speed_incoming[id_num]) < 2:   ### the vehicle is getting closer, and now exiting the RoI -- need to calculate speed
+                    self.speed_incoming[id_num][0] += 1
+                    self.speed_incoming[id_num].append(1)
+
+        if t < 340 and b > 340:     ### blue line
+            if r < 540:             ### get out from blue line
+                if id_num not in self.speed_outgoing:    ### the vehicle is getting further, and don't know when it firstly get into the RoI
+                    pass
+                elif len(self.speed_outgoing[id_num]) < 2:   ### the vehicle is getting further, and now exiting the RoI
+                    self.speed_outgoing[id_num][0] += 1
+                    self.speed_outgoing[id_num].append(1)
+            elif l > 670:           ### come into blue line
+                if id_num not in self.speed_incoming:
+                    self.speed_incoming[id_num] = [1]   ### the vehicle is getting closer, and firstly captured
+                else:
+                    self.speed_incoming[id_num][0] += 1   ### the vehicle is getting closer, and cpatured multiple times
+
+
+        if b < 340 and r < 540:       #### outgoing -- the vehicle exited the RoI -- calculate speed
+            if id_num in self.speed_outgoing:
+#                 print(self.speed_outgoing)
+                delta_t = self.speed_outgoing[id_num][0] * (1/self.fps)
+                delta_d = self.d
+                self.out_speed[id_num] = round((delta_d/delta_t)*3.6, 2)  ### change unit from m/s to km/h by multiplying 3.6
+#                 print('>> outgoing speed: ', self.out_speed[id_num], 'km/h')
+                self.speed_outgoing.pop(id_num)
+        if t > 540 and l > 670:        #### incoming -- the vehicle exited the RoI -- calculate speedl
+            if id_num in self.speed_incoming:
+#                 print(self.speed_incoming)
+                delta_t = self.speed_incoming[id_num][0] * (1/self.fps)
+                delta_d = self.d
+                self.in_speed[id_num] = round((delta_d/delta_t)*3.6, 2)  ### change unit from m/s to km/h by multiplying 3.6
+#                 print('>>> incoming speed: ', self.in_speed[id_num], 'km/h')
+                self.speed_incoming.pop(id_num)
+
+
+
+
+    def run_dsort(self, boxes, class_names, frame, ret):
         if ret == False:
-            break
-        ret, frame = cap.read()
-#         print('>>>>>> ret: ', ret)
-        if ret == False:
-            break
-        ret, frame = cap.read()
-#         print('>>>>>> ret: ', ret)
-        if ret == False:
-            break
-        ret, frame = cap.read()
-#         print('>>>>>> ret: ', ret)
-        if ret == False:
-            break
-        ret, frame = cap.read()
-#         print('>>>>>> ret: ', ret)
-        if ret == False:
-            break
+            print(ret, 'no_frame')
+            return
+        else:
+            frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+            frame = frame.astype(np.uint8)
 
-        output_queue.put((ODetect.run_yolov4(frame, ret), frame, ret))
+            tracker, detections_class = self.DSort.a_run_deep_sort(frame, boxes)
 
-    kill_queue.put(1)
-    cap.release()
-#     print('hell yea')
+            for track in tracker.tracks:
+#                 print('track.is_confirmed(): ', track.is_confirmed())
+#                 print('track.time_since_update: ', track.time_since_update)
+                if not track.is_confirmed() or track.time_since_update > 1:
+                    continue
 
+                bbox = track.to_tlbr() #Get the corrected/predicted bounding box
+                id_num = str(track.track_id) #Get the ID for the particular track.
+                features = track.features #Get the feature vector corresponding to the detection.
 
-def run_deepsort(kill_queue, input_queue, args):
-    video_path='tracking_record1.mov'
+                l = bbox[0]  ## x1
+                t = bbox[1]  ## y1
+                r = bbox[2]  ## x2
+                b = bbox[3]  ## y2
 
-    cap = cv2.VideoCapture(video_path)
-    cvfps = cap.get(cv2.CAP_PROP_FPS)
-    cvfps = 10
-
-    width  = cap.get(cv2.CAP_PROP_FRAME_WIDTH)  # float
-    height = cap.get(cv2.CAP_PROP_FRAME_HEIGHT) # float
-    cap.release()
+                self.flow(t, b, r, l, id_num)
+                self.density(t, b, r, l, track.outclass)
+                self.speed(t, b, r, l, id_num)
 
 
-    namesfile='detection/coco.names'
-    class_names = load_class_names(namesfile)
-#     print(class_names)
-
-    #### deepsort model
-    m_deepsort = call_deepsort(args)
-    DSort = deepsort_rbc(m_deepsort, width, height)
-    RClass = run_class(DSort, road=20*3*3, fps=cvfps, road_length=20)
-
+def run(ODetect, Rclass, cvfps):
+    test = False
     total_frames = 0
-    while kill_queue.empty():
-        if input_queue.empty():
-            sleep(0.1)
-            continue
+    while True:
+        if total_frames == 60*6:
+            break
         total_frames += 1
-#         print(total_frames)
-        if total_frames == 8*cvfps:
-            kill_queue.put(2)
 
-        detection, frame, ret = input_queue.get()
-        RClass.run_dsort(detection, class_names, frame, ret)
+        ret, frame = cap.read()
+        if ret == False:
+            break
+
+        result = ODetect.run_yolov4(frame, ret)
+        RClass.run_dsort(result, class_names, frame, ret)
 
         if total_frames % cvfps == 0:
-            print('>> flow outgoing: ', len(RClass.outgoing))
-            print('>> flow incoming: ', len(RClass.incoming))
-#            plugin.publish('env.traffic_flow.time', video_timestamp+(total_frames/cvfps))
-#            plugin.publish('env.traffic_flow.outgoing', len(RClass.outgoing))
-#            plugin.publish('env.traffic_flow.incoming', len(RClass.incoming))
-            RClass.total_outgoing = RClass.total_outgoing + RClass.outgoing
-            RClass.total_incoming = RClass.total_incoming + RClass.incoming
+            ##### traffic occupancy
+            print('road occupancy', RClass.out_occupancy/cvfps, 'm', RClass.in_occupancy/cvfps, 'm')
+            print('road occupancy', RClass.out_occupancy_area/RClass.d/cvfps, RClass.in_occupancy_area/RClass.d/cvfps)
+            RClass.out_occupancy_area = 0
+            RClass.in_occupancy_area = 0
+            RClass.out_occupancy = 0
+            RClass.in_occupancy = 0
+
+            ##### traffic flow
+            print('traffic flow', len(RClass.outgoing), len(RClass.incoming))
             RClass.outgoing = []
             RClass.incoming = []
-
-            print('>>> density outgoing: ', round(RClass.out_occupied/(RClass.road*cvfps)*100, 2))
-            print('>>> density incoming: ', round(RClass.in_occupied/(RClass.road*cvfps)*100, 2))
-#            plugin.publish('env.traffic_density.time', video_timestamp+(total_frames/cvfps))
-#            plugin.publish('env.traffic_density.outgoing', round(RClass.out_occupied/(RClass.road*cvfps)*100, 2))
-#            plugin.publish('env.traffic_density.incoming', round(RClass.in_occupied/(RClass.road*cvfps)*100, 2))
-            RClass.total_out_occupied = RClass.total_out_occupied + RClass.out_occupied
-            RClass.total_in_occupied = RClass.total_in_occupied + RClass.in_occupied
-            RClass.out_occupied = 0
-            RClass.in_occupied = 0
-
-
-
-    ### Split results (averaged in sec -- or total length of the video)
-    ##### traffic flow
-    total_sec = total_frames/cvfps
-    print('>> frames: ', total_frames, cvfps, total_sec)
-    print('>> counts: ', RClass.total_outgoing, RClass.total_incoming)
-    print('>> flow: ', len(RClass.total_outgoing)/total_sec, len(RClass.total_incoming)/total_sec)
-#    plugin.publish('env.traffic_flow.time', video_timestamp+(total_frames/cvfps))
-#    plugin.publish('env.traffic_flow.outgoing', len(RClass.outgoing))
-#    plugin.publish('env.traffic_flow.incoming', len(RClass.incoming))
-
-
-    ##### traffic density
-    print('>>> density outgoing: ', round(RClass.total_out_occupied/(RClass.road*total_frames)*100, 2))
-    print('>>> density incoming: ', round(RClass.total_in_occupied/(RClass.road*total_frames)*100, 2))
-#    plugin.publish('env.traffic_density.time', video_timestamp+(total_frames/cvfps))
-#    plugin.publish('env.traffic_density.outgoing', round(RClass.out_occupied/(RClass.road*cvfps)*100, 2))
-#    plugin.publish('env.traffic_density.incoming', round(RClass.in_occupied/(RClass.road*cvfps)*100, 2))
-
 
     ##### traffic speed
     s = [0,0,0,0]
@@ -181,61 +227,52 @@ def run_deepsort(kill_queue, input_queue, args):
     for k, v in RClass.in_speed.items():
         s[2] += 1
         s[3] += v
-#     print(s)
+    print(s)
 
-    speed_stack['raw'] = s
-#     plugin.publish('env.traffic_speed.time', video_timestamp+(total_frames/cvfps))
-    if s[0] != 0:
-#         print('speed out: ', round(s[1]/s[0], 2))
-        plugin.publish('env.traffic_speed.outgoing', round(s[1]/s[0], 2))
+    if s[0] == 0:
+        print('speed out: ', 0, 'm/s')
     else:
-#         print('none of vehicles went through RoI')
-        plugin.publish('env.traffic_speed.outgoing', 'n/a')
-    if s[2] != 0:
-#         print('speed in: ', round(s[3]/s[2], 2))
-        plugin.publish('env.traffic_speed.incoming', round(s[3]/s[2], 2))
+        print('speed out: ', round(s[1]/s[0], 2), 'm/s')
+        print('speed out: ', round(s[1]/s[0], 2)/3.6, 'km/h')
+
+    if s[2] == 0:
+        print('speed in: ', 0, 'm/s')
     else:
-#         print('none of vehicles went through RoI')
-        plugin.publish('env.traffic_speed.outgoing', 'n/a')
+        print('speed in: ', round(s[3]/s[2], 2), 'm/s')
+        print('speed in: ', round(s[3]/s[2], 2)/3.6, 'km/h')
 
     print('stop plugin')
+    cap.release()
 
-
-
-if __name__ == '__main__':
+if __name__=='__main__':
     parser = argparse.ArgumentParser()
-    parser.add_argument('--stream', dest='stream', action='store', default="camera", help='ID or name of a stream, e.g. sample')
-    parser.add_argument('--deepsort_checkpoint', type=str, required=True, help='DeepSort checkpoint path')
-    parser.add_argument('--yolov4_cfg', type=str, required=True, help='Yolov4 cfg path')
-    parser.add_argument('--yolov4_weight', type=str, required=True, help='Yolov4 weight path')
-    parser.add_argument('--video', type=str, required=True, help='Video path')
+    parser.add_argument('--use_cuda', action='store_false', default=True)
     args = parser.parse_args()
 
-    video_queue = Queue(maxsize=1)
-    message_queue = Queue(maxsize=1)
-    kill_queue = Queue(maxsize=1)
 
-#     video_process = Process(target=run_videocapture, args=(video_queue,))
-    yolo_process = Process(target=run_yolov4, args=(kill_queue, message_queue, video_queue, args,))
-    dsort_process = Process(target=run_deepsort, args=(kill_queue, message_queue, args,))
+    video_path='tracking_record1.mov'
+    usecuda = False
+    roadlength = 60*3
+    roadarea = 60*3*3
 
-#     video_process.start()
-    yolo_process.start()
-    dsort_process.start()
+    cap = cv2.VideoCapture(video_path)
+    cvfps = cap.get(cv2.CAP_PROP_FPS)
+    print('fps:  ', cvfps)
 
-    try:
-        while kill_queue.empty():
-            sleep(1)
-    except KeyboardInterrupt:
-        pass
-    finally:
-        print('>>>>>> video fps must higher or equal than 12 <<<<<<')
-        if kill_queue.empty():
-            kill_queue.put(0)
-#         if video_process.is_alive():
-#             video_process.terminate()
-        if yolo_process.is_alive():
-            yolo_process.terminate()
-        if dsort_process.is_alive():
-            dsort_process.terminate()
+    width  = cap.get(cv2.CAP_PROP_FRAME_WIDTH)  # float
+    height = cap.get(cv2.CAP_PROP_FRAME_HEIGHT) # float
 
+    ### ML models
+    #### yolo model
+    ODetect = yolov4_trck(use_cuda=usecuda)
+
+    namesfile='detection/coco.names'
+    num_classes = ODetect.m.num_classes
+    class_names = load_class_names(namesfile)
+
+    #### deepsort model
+    m_deepsort = call_deepsort(use_cuda=usecuda)
+    DSort = deepsort_rbc(m_deepsort, width, height, use_cuda=usecuda)
+    RClass = run_class(DSort, road=roadarea, fps=cvfps, road_length=roadlength)
+
+    run(ODetect, RClass, cvfps)

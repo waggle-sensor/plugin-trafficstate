@@ -31,7 +31,8 @@ def get_gaussian_mask():
  
 
 class deepsort_rbc():
-    def __init__(self, m_deepsort, width, height):
+    def __init__(self, m_deepsort, width, height, use_cuda):
+        self.use_cuda = use_cuda
         self.width = width
         self.height = height
 
@@ -39,7 +40,10 @@ class deepsort_rbc():
         self.metric = nn_matching.NearestNeighborDistanceMetric('cosine', .5, 100)  ## euclidian or cosine
         self.tracker = Tracker(self.metric, max_iou_distance=0.7, max_age=10, n_init=3)
 
-        self.gaussian_mask = get_gaussian_mask().cuda()
+        if use_cuda:
+            self.gaussian_mask = get_gaussian_mask().cuda()
+        else:
+            self.gaussian_mask = get_gaussian_mask()
 
         self.transforms = torchvision.transforms.Compose([
             torchvision.transforms.ToPILImage(),
@@ -86,7 +90,11 @@ class deepsort_rbc():
             trackers = self.tracker.tracks
             return trackers
 
-        processed_crops = self.pre_process(frame, boxes).cuda()
+        if self.use_cuda:
+            processed_crops = self.pre_process(frame, boxes).cuda()
+        else:
+            processed_crops = self.pre_process(frame, boxes)
+
         processed_crops = self.gaussian_mask * processed_crops
 
         features = self.encoder.forward_once(processed_crops)

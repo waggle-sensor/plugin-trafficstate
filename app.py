@@ -190,10 +190,11 @@ class run_class():
                 self.speed(t, b, r, l, id_num)
 
 
-def run(ODetect, Rclass, cvfps):
+def run(ODetect, Rclass, cvfps, cap):
     test = False
     total_frames = 0
     while True:
+        print('total_frames', total_frames)
         if total_frames == 60*6:
             break
         total_frames += 1
@@ -275,4 +276,4 @@ if __name__=='__main__':
     DSort = deepsort_rbc(m_deepsort, width, height, use_cuda=usecuda)
     RClass = run_class(DSort, road=roadarea, fps=cvfps, road_length=roadlength)
 
-    run(ODetect, RClass, cvfps)
+    run(ODetect, RClass, cvfps, cap)

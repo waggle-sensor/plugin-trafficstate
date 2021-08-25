@@ -194,7 +194,7 @@ def run(ODetect, Rclass, cvfps, cap):
     test = False
     total_frames = 0
     while True:
-        print('total_frames', total_frames)
+        # print('total_frames', total_frames)
         if total_frames == 60*6:
             break
         total_frames += 1
@@ -284,7 +284,7 @@ if __name__=='__main__':
     record_video()
 
     video_path='record.mp4'
-    usecuda = False
+    usecuda = args.use_cuda
     roadlength = 60*3
     roadarea = 60*3*3
 

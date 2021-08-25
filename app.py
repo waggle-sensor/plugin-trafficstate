@@ -245,13 +245,45 @@ def run(ODetect, Rclass, cvfps, cap):
     print('stop plugin')
     cap.release()
 
+
+
+
+def record_video():
+    video_path='tracking_record1.mov'
+    cap = cv2.VideoCapture(video_path)
+    # fps = cap.get(cv2.CAP_PROP_FPS)
+    fps = 12
+    width  = cap.get(cv2.CAP_PROP_FRAME_WIDTH)  # float
+    height = cap.get(cv2.CAP_PROP_FRAME_HEIGHT) # float
+
+    fourcc = cv2.VideoWriter_fourcc(*'MP4V')
+    out = cv2.VideoWriter('record.mp4',fourcc, fps, (int(width),int(height)), True)
+
+    count = 0
+    st = time.time()
+    while True:
+        t = time.time()
+        if t - st >= 0.08:
+            count += 1
+            ret, frame = cap.read()
+            out.write(frame)
+            st = t
+        if count == 120:
+            break
+
+    out.release()
+    cap.release()
+
+
+
 if __name__=='__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('--use_cuda', action='store_false', default=True)
     args = parser.parse_args()
 
+    record_video()
 
-    video_path='tracking_record1.mov'
+    video_path='record.mp4'
     usecuda = False
     roadlength = 60*3
     roadarea = 60*3*3

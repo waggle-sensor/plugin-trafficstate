@@ -1,12 +1,17 @@
-FROM waggle/plugin-base:1.1.1-ml-cuda10.2-arm64
+FROM waggle/plugin-base:1.1.1-ml
+
+RUN apt-get update \
+  && apt-get install -y \
+  ffmpeg \
+  && rm -rf /var/lib/apt/lists/*
 
 COPY requirements.txt /app/
 RUN pip3 install --no-cache-dir -r /app/requirements.txt
 
-COPY deep_sort /app/deep_sort
-COPY detection /app/detection
-COPY tool /app/tool
-COPY app.py deepsort.py siamese_net.py yolov4.py /app/
+COPY deep_sort/ /app/deep_sort
+COPY detection/ /app/detection
+COPY tool/ /app/tool
+COPY app.py siamese_net.py /app/
 
 ARG SAGE_STORE_URL="https://osn.sagecontinuum.org"
 ARG BUCKET_ID_MODEL="cafb2b6a-8e1d-47c0-841f-3cad27737698"

@@ -1,10 +1,12 @@
+import os
 import cv2
 import numpy as np
 from datetime import datetime
 import time
 import argparse
-
-from app_utils import load_and_generate_config
+import json
+from pathlib import Path
+from app_utils import RegionOfInterest
 
 from tool.utils import *
 from tool.torch_utils import do_detect
@@ -12,6 +14,7 @@ from tool.darknet2pytorch import Darknet
 
 from deep_sort.deepsort import *
 import torch
+import ffmpeg
 
 from waggle import plugin
 from waggle.data.vision import VideoCapture, resolve_device
@@ -73,9 +76,13 @@ class RunClass():
 
     def calculate_flow(self, t, b, r, l, id_num):
         # Add id_num if the box (t, b, r, l) is entering the ROI
-        if self.roi.touches(t, b, r, l):
+        ret = False
+        if self.roi.overlaps(t, b, r, l):
+            print(f'{id_num} touches the ROI')
+            ret = True
             if id_num not in self.flow:
                 self.flow.append(id_num)
+        return ret
 
     def get_flow(self):
         return len(self.flow)
@@ -84,24 +91,27 @@ class RunClass():
         # Calculate occupancy area of the class and
         # accumulate the area
         name = self.class_names[outclass]
+        #print(f'{name} recognized in {t}, {b}, {r}, {l}')
         if self.roi.contains(t, b, r, l):
+            #print(f'{name} is contained inside the ROI')
             if 'car' in name:
                 self.occupancy_area += 4.5 * 1.7
             elif 'bus' in name:
                 self.occupancy_area += 13 * 2.55
             elif 'truck' in name:
                  self.occupancy_area += 5.5 * 2
-        self.density_frames += 1
+        #self.density_frames += 1
 
     def get_occupancy(self):
         # Return the accumulated occupied area divided by the road area
         # and frames used for accumulating the occupied area
-        return self.occupancy_area / self.roi.road_area / self.density_frames
+        print(f'area: {self.occupancy_area} road_area: {self.roi.road_area} density_frames: {self.density_frames}')
+        return self.occupancy_area / self.roi.road_area / self.fps
 
     def calculate_speed(self, t, b, r, l, id_num):
         # Count frames while id_num touches or is in the ROI
         # If id_num was counted and no longer inside the ROI, then indicate it exited the ROI
-        if self.roi.contains(t, b, r, l) or self.roi.touches(r, b, r, l):
+        if self.roi.contains(t, b, r, l) or self.roi.overlaps(t, b, r, l):
             if id_num not in self.speed:
                 self.speed[id_num] = 1
             else:
@@ -112,7 +122,7 @@ class RunClass():
 
     def get_averaged_speed(self):
         sum_speed = 0.
-        for vehicle_id, couted_frames in self.speed.items():
+        for vehicle_id, counted_frames in self.speed.items():
             # negative frames mean the vehicle exited the ROI
             # so considerable to calculate the speed because it means
             # the vehicle traveled the distance of the ROI within the counted frames
@@ -120,7 +130,7 @@ class RunClass():
                 delta_t = -1 * counted_frames / self.fps
                 delta_d = self.roi.road_area
                 sum_speed += delta_d / delta_t * 3.6 # m/s to km/h
-        return sum_speed / len(self.speed.keys())
+        return 0. if len(self.spped.keys()) == 0 else sum_speed / len(self.speed.keys())
 
     def reset_flow_and_occupancy(self):
         self.flow = []
@@ -150,15 +160,21 @@ class RunClass():
             t = bbox[1]  ## y1
             r = bbox[2]  ## x2
             b = bbox[3]  ## y2
+            frame = cv2.putText(frame, id_num, (int(l), int(t)-10), cv2.FONT_HERSHEY_SIMPLEX, 0.9, (0,255,0), 2)
 
-            self.calculate_flow(t, b, r, l, id_num)
+            if self.calculate_flow(t, b, r, l, id_num):
+                frame = cv2.rectangle(frame, (int(l), int(t)), (int(r), int(b)), (255, 0, 0), 2)
+            else:
+                frame = cv2.rectangle(frame, (int(l), int(t)), (int(r), int(b)), (0, 255, 0), 2)
+
             self.calculate_density(t, b, r, l, track.outclass)
             self.calculate_speed(t, b, r, l, id_num)
+        return cv2.cvtColor(frame, cv2.COLOR_RGB2BGR)
 
 
 def configure_and_load_models(args):
-    device_url = resolve_device(args.stream)
-    cap = cv2.VideoCapture(device_url)
+    device_url = resolve_device(Path(args.stream))
+    cap = cv2.VideoCapture(args.stream)
     cvfps = args.fps
     width  = cap.get(cv2.CAP_PROP_FRAME_WIDTH)  # float
     height = cap.get(cv2.CAP_PROP_FRAME_HEIGHT) # float
@@ -169,16 +185,16 @@ def configure_and_load_models(args):
     print(f'CUDA: {use_cuda}')
     
     print('Loading models...')
-    o_detect = Yolov4Trck(use_cuda=usecuda)
+    o_detect = Yolov4Trck(use_cuda=use_cuda)
 
     #### deepsort model
-    m_deepsort = call_deepsort(use_cuda=usecuda)
-    DSort = deepsort_rbc(m_deepsort, width, height, use_cuda=usecuda)
+    m_deepsort = call_deepsort(use_cuda=use_cuda)
+    DSort = deepsort_rbc(m_deepsort, width, height, use_cuda=use_cuda)
     r_class = RunClass(DSort, fps=cvfps, labels=args.labels)
     print('Done')
 
     print('Configuring target area...')
-    ret, config_filename = load_and_generate_config(args.config)
+    #ret, config_filename = load_and_generate_config(args.config)
     with open(args.config, 'r') as file:
         loaded_config = json.load(file)
     roi = RegionOfInterest(
@@ -186,33 +202,90 @@ def configure_and_load_models(args):
         width,
         height,
         loaded_config['road_area'])
-    print(f'Boundary of the ROI: {roi.bounds}')
+    print(f'Boundary of the ROI: {roi.roi.bounds}')
     r_class.set_roi(roi)
     return o_detect, r_class
 
 
-def record_video(stream, duration=10, fps=12):
-    with VideoCapture(stream) as cap:
-        width  = cap.get(cv2.CAP_PROP_FRAME_WIDTH)  # float
-        height = cap.get(cv2.CAP_PROP_FRAME_HEIGHT) # float
+"""
+    ffmpeg describes that 
+    https://trac.ffmpeg.org/wiki/ChangingFrameRate
+"""
+def record_video(stream, duration=30, fps=12, skip_second=3):
+    # Assume timestamp is in nano seconds
+    timestamp = get_timestamp() + skip_second * 1e9
+    try:
+        script_dir = os.path.dirname(__file__)
+    except NameError:
+        script_dir = os.getcwd()
+    filename_raw = os.path.join(script_dir, 'record_raw.mp4')
+    c = ffmpeg.input(stream, ss=skip_second).output(
+            filename_raw,
+            codec = "copy", # use same codecs of the original video
+            f='mp4',
+            t=duration).overwrite_output()
+    # print(c.compile())
+    c.run()
+    #TODO: will need to check if the recording succeeded
+    probe = ffmpeg.probe('record_raw.mp4')
+    need_change_fps = False
+    try:
+        f = probe['streams'][0]['r_frame_rate']
+        # NOTE: use the fps with 10% margin 
+        #       in case r_frame_rate does not equal exactly to the fps
+        if (fps * 0.9) <= eval(f) <= (fps * 1.1):
+            pass
+        else:
+            need_change_fps = True
+    except:
+        return "Could not probe record_raw.mp4", None, None
+    filename = os.path.join(script_dir, 'record.mp4')
+    if need_change_fps:
+        print('Converting fps... This will take time.')
+        d = ffmpeg.input(filename_raw).filter_('fps', fps=fps).output(
+                filename,
+                f='mp4',
+                t=duration).overwrite_output()
 
-        fourcc = cv2.VideoWriter_fourcc(*'MP4V')
-        filename = "record.mp4"
-        out = cv2.VideoWriter(filename, fourcc, fps, (int(width),int(height)), True)
+        # print(d.compile())
+        d.run()
+    else:
+        d = ffmpeg.input(filename_raw).output(
+                filename,
+                codec = "copy", # use same codecs of the original video
+                f='mp4',
+                t=duration).overwrite_output()
 
-        start_time = time.time()
-        err = None
-        timestamp = get_timestamp()
-        while True:
-            ok, frame = cap.read()
-            if not ok:
-                err = "Failed to capture a frame"
-                break
-            out.write(frame)
-            if time.time() > start_time + duration:
-                break
-        out.release()
-        return err, timestamp, filename
+        # print(d.compile())
+        d.run()
+    err = ""
+    return err, filename, timestamp
+
+
+# Deprecated!
+# def record_video(stream, duration=10, fps=12):
+#     with VideoCapture(stream) as cap:
+#         width  = cap.get(cv2.CAP_PROP_FRAME_WIDTH)  # float
+#         height = cap.get(cv2.CAP_PROP_FRAME_HEIGHT) # float
+
+#         fourcc = cv2.VideoWriter_fourcc(*'mp4v')
+#         filename = "record.mp4"
+#         out = cv2.VideoWriter(filename, fourcc, fps, (int(width),int(height)), True)
+
+#         start_time = time.time()
+#         err = ""
+#         timestamp = get_timestamp()
+#         captured_frames = 0
+#         while captured_frames <= (duration * fps):
+#             ok, frame = cap.read()
+#             if not ok:
+#                 err = "Failed to capture a frame"
+#                 break
+#             out.write(frame)
+#             captured_frames += 1
+#         out.release()
+#         print(f'{captured_frames} captured')
+#         return err, timestamp, filename, width, height
 
 
 def run(args):
@@ -220,26 +293,48 @@ def run(args):
     o_detect, r_class = configure_and_load_models(args)
     print('Done')
 
+    sampling_countdown = -1
+    if args.sampling_interval > -1:
+        print(f'Input video will be sampled every {args.sampling_interval}th inferencing')
+        sampling_countdown = args.sampling_interval
+
     print('Starting traffic state estimation..')
     plugin.init()
     while True:
-        print('Grabbing video for {args.duration} seconds')
-        ret, timestamp, filename = record_video(args.stream, args.duration, args.fps)
-        ret, frame = cap.read()
-        if ret =! None:
-            print(f'Error: {ret}')
+        print(f'Grabbing video for {args.duration} seconds')
+        err, filename, timestamp = record_video(args.stream, args.duration, args.fps)
+        if err != "":
+            print(f'Error: {err}')
             break
 
         print('Analyzing the video...')
         total_frames = 0
+        do_sampling = False
+        if sampling_countdown > 0:
+            sampling_countdown -= 1
+        elif sampling_countdown == 0:
+            do_sampling = True
+            sampling_countdown = args.sampling_interval
+
         with VideoCapture(filename) as cap:
+            width  = cap.get(cv2.CAP_PROP_FRAME_WIDTH)  # float
+            height = cap.get(cv2.CAP_PROP_FRAME_HEIGHT) # float
+
+            if do_sampling:
+                b = r_class.roi.roi.bounds
+                fourcc = cv2.VideoWriter_fourcc(*'mp4v')
+                out = cv2.VideoWriter("sample.mp4", fourcc, args.fps, (int(width), int(height)), True)
+
             while True:
                 ret, frame = cap.read()
                 if ret == False:
                     break
 
                 result = o_detect.run_yolov4(frame)
-                r_class.run_dsort(result, frame)
+                sample = r_class.run_dsort(result, frame)
+                if do_sampling:
+                    sample = cv2.rectangle(sample, (int(b[0]), int(b[1])), (int(b[2]), int(b[3])), (255, 0, 0), 2)
+                    out.write(sample)
                 total_frames += 1
 
                 if total_frames % args.fps == 0:
@@ -257,7 +352,7 @@ def run(args):
                         'traffic.state.flow', 
                         flow,
                         timestamp=elapsed_time)
-                    print(f'{datetime.fromtimestamp(elapsed_time * 1.e9)} Traffic occupancy: {occupancy} flow: {flow}')
+                    print(f'{datetime.fromtimestamp(elapsed_time / 1.e9)} Traffic occupancy: {occupancy} flow: {flow}')
                     # Reset the accumulated values
                     r_class.reset_flow_and_occupancy()
 
@@ -266,8 +361,11 @@ def run(args):
             plugin.publish(
                 'traffic.state.averaged_speed',
                 averaged_speed,
-                timestamp=timestamp))
-            print(f'{datetime.fromtimestamp(timestamp * 1.e9)} Traffic speed: {averaged_speed}')
+                timestamp=timestamp)
+            print(f'{datetime.fromtimestamp(timestamp / 1.e9)} Traffic speed: {averaged_speed}')
+        if do_sampling:
+            out.release()
+            plugin.upload_file("sample.mp4")
         r_class.clean_up()
         print('Tracker is cleaned up for next analysis')
 
@@ -297,6 +395,9 @@ if __name__=='__main__':
         '-config', dest='config',
         action='store', type=str,
         help='Configuration file for target view')
-    
+    parser.add_argument(
+        '-sampling-interval', dest='sampling_interval',
+        action='store', default=-1, type=int,
+        help='Inferencing interval for sampling results')
     args = parser.parse_args()
     run(args)

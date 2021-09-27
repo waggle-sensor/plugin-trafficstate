@@ -1,4 +1,3 @@
-from shapely.geometry import Point
 from shapely.geometry.polygon import Polygon
 
 
@@ -24,27 +23,21 @@ class RegionOfInterest():
         self.road_area = road_area
 
     def contains(self, t, b, r, l):
-        if r > l:
-            x = int((r - l) / 2.)
-        else:
-            x = int((l - r) / 2.)
-        if t > b:
-            y = int((t - b) / 2.)
-        else:
-            y = int((b - t) / 2.)
-        p = Point((x, y))
-        return self.roi.contains(p)
+        obj = Polygon([
+            (l, t),
+            (l, b),
+            (r, b),
+            (r, t)
+        ])
+        return self.roi.contains(obj)
 
-    def touches(self, t, b, r, l):
-        if r > l:
-            x = int((r - l) / 2.)
-        else:
-            x = int((l - r) / 2.)
-        if t > b:
-            y = int((t - b) / 2.)
-        else:
-            y = int((b - t) / 2.)
-        p = Point((x, y))
-        return self.roi.touches(p)
+    def overlaps(self, t, b, r, l):
+        obj = Polygon([
+            (l, t),
+            (l, b),
+            (r, b),
+            (r, t)
+        ])
+        return self.roi.overlaps(obj)
 
 # def load_and_generate_config():

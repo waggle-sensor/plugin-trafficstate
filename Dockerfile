@@ -6,7 +6,7 @@ RUN apt-get update \
   && rm -rf /var/lib/apt/lists/*
 
 COPY requirements.txt /app/
-RUN pip3 install --no-cache-dir -r /app/requirements.txt
+RUN pip3 install --no-cache-dir --upgrade -r /app/requirements.txt
 
 COPY deep_sort/ /app/deep_sort
 COPY detection/ /app/detection

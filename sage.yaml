@@ -20,3 +20,7 @@ inputs:
     type: "string"
   - id: "config"
     type: "string"
+  - id: "resampling"
+    type: "boolean"
+  - id: "resampling_fps"
+    type: "float"

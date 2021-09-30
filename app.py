@@ -211,55 +211,34 @@ def configure_and_load_models(args):
     ffmpeg describes that 
     https://trac.ffmpeg.org/wiki/ChangingFrameRate
 """
-def record_video(stream, duration=30, fps=12, skip_second=3):
-    # Assume timestamp is in nano seconds
+def take_sample(stream, duration, skip_second, resampling, resampling_fps):
+    stream_url = resolve_device(stream)
+    # Assume PyWaggle's timestamp is in nano seconds
     timestamp = get_timestamp() + skip_second * 1e9
     try:
         script_dir = os.path.dirname(__file__)
     except NameError:
         script_dir = os.getcwd()
-    filename_raw = os.path.join(script_dir, 'record_raw.mp4')
-    c = ffmpeg.input(stream, ss=skip_second).output(
-            filename_raw,
-            codec = "copy", # use same codecs of the original video
-            f='mp4',
-            t=duration).overwrite_output()
-    # print(c.compile())
-    c.run()
-    #TODO: will need to check if the recording succeeded
-    probe = ffmpeg.probe('record_raw.mp4')
-    need_change_fps = False
-    try:
-        f = probe['streams'][0]['r_frame_rate']
-        # NOTE: use the fps with 10% margin 
-        #       in case r_frame_rate does not equal exactly to the fps
-        if (fps * 0.9) <= eval(f) <= (fps * 1.1):
-            pass
-        else:
-            need_change_fps = True
-    except:
-        return "Could not probe record_raw.mp4", None, None
-    filename = os.path.join(script_dir, 'record.mp4')
-    if need_change_fps:
-        print('Converting fps... This will take time.')
-        d = ffmpeg.input(filename_raw).filter_('fps', fps=fps).output(
-                filename,
-                f='mp4',
-                t=duration).overwrite_output()
+    filename_raw = os.path.join(script_dir, 'sample_raw.mp4')
+    filename = os.path.join(script_dir, 'sample.mp4')
 
-        # print(d.compile())
-        d.run()
-    else:
-        d = ffmpeg.input(filename_raw).output(
-                filename,
-                codec = "copy", # use same codecs of the original video
-                f='mp4',
-                t=duration).overwrite_output()
+    c = ffmpeg.input(stream_url, ss=skip_second).output(
+        filename_raw,
+        codec = "copy", # use same codecs of the original video
+        f='mp4',
+        t=duration).overwrite_output()
+    print(c.compile())
+    c.run(quiet=True)
 
-        # print(d.compile())
-        d.run()
-    err = ""
-    return err, filename, timestamp
+    d = ffmpeg.input(filename_raw)
+    if resampling:
+        print(f'Resampling to {resampling_fps}...')
+        d = ffmpeg.filter(d, 'fps', fps=resampling_fps)
+    d = ffmpeg.output(d, filename, f='mp4', t=duration).overwrite_output()
+    print(d.compile())
+    d.run(quiet=True)
+    # TODO: We may want to inspect whether the ffmpeg commands succeeded
+    return True, filename, timestamp
 
 
 # Deprecated!
@@ -302,10 +281,16 @@ def run(args):
     plugin.init()
     while True:
         print(f'Grabbing video for {args.duration} seconds')
-        err, filename, timestamp = record_video(args.stream, args.duration, args.fps)
-        if err != "":
-            print(f'Error: {err}')
-            break
+        ret, filename, timestamp = take_sample(
+            stream=args.stream,
+            duration=args.duration,
+            skip_second=args.skip_second,
+            resampling=args.resampling,
+            resampling_fps=args.resampling_fps
+        )
+        if ret == False:
+            print('Coud not sample video. Exiting...')
+            return 1
 
         print('Analyzing the video...')
         total_frames = 0
@@ -384,7 +369,10 @@ if __name__=='__main__':
         action='store', default=10., type=float,
         help='Time duration for input video')
     parser.add_argument(
-        '-fps', dest='fps',
+        '-resampling', dest='resampling', default=False,
+        action='store_true', help="Resampling the sample to -resample-fps option (defualt 12)")
+    parser.add_argument(
+        '-resampling-fps', dest='resampling_fps',
         action='store', default=12, type=int,
         help='Frames per second for input video')
     parser.add_argument(
@@ -392,9 +380,13 @@ if __name__=='__main__':
         action='store', default='detection/coco.names', type=str,
         help='Labels for detection')
     parser.add_argument(
-        '-config', dest='config',
+        '-roi-name', dest='roi_name',
         action='store', type=str,
-        help='Configuration file for target view')
+        help='Name of RoI used when publishing data')
+    parser.add_argument(
+        '-roi-coordinates', dest='roi_coordinates',
+        action='store', type=str,
+        help='Coordinates of RoI with X,Ys in relative values of (0. - 1.)')
     parser.add_argument(
         '-sampling-interval', dest='sampling_interval',
         action='store', default=-1, type=int,

@@ -1,22 +1,27 @@
-FROM waggle/plugin-base:1.0.0-ml-cuda11.0-amd64
+FROM waggle/plugin-base:1.1.1-ml
+
+RUN apt-get update \
+  && apt-get install -y \
+  ffmpeg \
+  && rm -rf /var/lib/apt/lists/*
 
 COPY requirements.txt /app/
-RUN pip3 install --no-cache-dir -r /app/requirements.txt
+RUN pip3 install --no-cache-dir --upgrade -r /app/requirements.txt
 
-COPY deep_sort /app/deep_sort
-COPY detection /app/detection
-COPY tool /app/tool
-COPY app.py deepsort.py siamese_net.py yolov4.py /app/
+COPY deep_sort/ /app/deep_sort
+COPY detection/ /app/detection
+COPY tool/ /app/tool
+COPY app.py siamese_net.py /app/
 
-ARG SAGE_STORE_URL="HOST"
-ARG SAGE_USER_TOKEN="-10"
-ARG BUCKET_ID_MODEL="BUCKET_ID_MODEL"
+ARG SAGE_STORE_URL="https://osn.sagecontinuum.org"
+ARG BUCKET_ID_MODEL="cafb2b6a-8e1d-47c0-841f-3cad27737698"
 
 ENV SAGE_STORE_URL=${SAGE_STORE_URL} \
-    SAGE_USER_TOKEN=${SAGE_USER_TOKEN} \
     BUCKET_ID_MODEL=${BUCKET_ID_MODEL}
 
-WORKDIR /app
-ENTRYPOINT ["python3", "/app/app.py"]
+RUN sage-cli.py storage files download ${BUCKET_ID_MODEL} model640.pt --target /app/model640.pt \
+  && sage-cli.py storage files download ${BUCKET_ID_MODEL} yolov4.cfg --target /app/yolov4.cfg \
+  && sage-cli.py storage files download ${BUCKET_ID_MODEL} yolov4.weights --target /app/yolov4.weights
 
-## need to add models
+WORKDIR /app
+ENTRYPOINT ["python3", "-u", "/app/app.py"]

@@ -13,7 +13,7 @@ class RegionOfInterest():
         actual_coordinates = []
         for c in coordinates:
             actual_coordinates.append(
-                (int(c[0] / 100. * image_width), int(c[1] / 100. * image_height))
+                (int(c[0] * image_width), int(c[1] * image_height))
             )
         self.roi = Polygon(actual_coordinates)
         if self.roi.area < 1:

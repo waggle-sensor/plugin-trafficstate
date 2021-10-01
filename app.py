@@ -78,7 +78,6 @@ class RunClass():
         # Add id_num if the box (t, b, r, l) is entering the ROI
         ret = False
         if self.roi.overlaps(t, b, r, l):
-            print(f'{id_num} touches the ROI')
             ret = True
             if id_num not in self.flow:
                 self.flow.append(id_num)
@@ -130,7 +129,7 @@ class RunClass():
                 delta_t = -1 * counted_frames / self.fps
                 delta_d = self.roi.road_area
                 sum_speed += delta_d / delta_t * 3.6 # m/s to km/h
-        return 0. if len(self.spped.keys()) == 0 else sum_speed / len(self.speed.keys())
+        return 0. if len(self.speed.keys()) == 0 else sum_speed / len(self.speed.keys())
 
     def reset_flow_and_occupancy(self):
         self.flow = []
@@ -144,7 +143,7 @@ class RunClass():
         frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
         frame = frame.astype(np.uint8)
 
-        tracker, detections_class = self.DSort.a_run_deep_sort(frame, boxes)
+        tracker = self.DSort.a_run_deep_sort(frame, boxes)
 
         for track in tracker.tracks:
 #                 print('track.is_confirmed(): ', track.is_confirmed())
@@ -160,7 +159,8 @@ class RunClass():
             t = bbox[1]  ## y1
             r = bbox[2]  ## x2
             b = bbox[3]  ## y2
-            frame = cv2.putText(frame, id_num, (int(l), int(t)-10), cv2.FONT_HERSHEY_SIMPLEX, 0.9, (0,255,0), 2)
+            name = self.class_names[track.outclass]
+            frame = cv2.putText(frame, f'{id_num}:{name}', (int(l), int(t)-10), cv2.FONT_HERSHEY_SIMPLEX, 0.9, (0,255,0), 2)
 
             if self.calculate_flow(t, b, r, l, id_num):
                 frame = cv2.rectangle(frame, (int(l), int(t)), (int(r), int(b)), (255, 0, 0), 2)
@@ -187,21 +187,22 @@ def load_models(width, height, fps, no_cuda, labels):
     use_cuda = False if no_cuda else True
     print(f'CUDA: {use_cuda}')
 
-    print('Loading models...')
     o_detect = Yolov4Trck(use_cuda=use_cuda)
 
     #### deepsort model
     m_deepsort = call_deepsort(use_cuda=use_cuda)
     DSort = deepsort_rbc(m_deepsort, width, height, use_cuda=use_cuda)
     r_class = RunClass(DSort, fps=fps, labels=labels)
-    print('Done')
 
     return o_detect, r_class
 
 
 def get_region_of_interest(width, height, roi_name, roi_coordinates, roi_area):
     try:
-        coordinates = [x.split(',') for x in roi_coordinates.strip().split(' ')]
+        coordinates = []
+        for c in roi_coordinates.strip().split(' '):
+            x, y = c.split(',')
+            coordinates.append((float(x), float(y)))
         roi = RegionOfInterest(
             coordinates,
             width,
@@ -223,8 +224,8 @@ def take_sample(stream, duration, skip_second, resampling, resampling_fps):
         script_dir = os.path.dirname(__file__)
     except NameError:
         script_dir = os.getcwd()
-    filename_raw = os.path.join(script_dir, 'sample_raw.mp4')
-    filename = os.path.join(script_dir, 'sample.mp4')
+    filename_raw = os.path.join(script_dir, 'record_raw.mp4')
+    filename = os.path.join(script_dir, 'record.mp4')
 
     c = ffmpeg.input(stream_url, ss=skip_second).output(
         filename_raw,
@@ -273,11 +274,16 @@ def take_sample(stream, duration, skip_second, resampling, resampling_fps):
 
 def run(args):
     device_url = resolve_device(args.stream)
-    ret, fps, widht, height = get_stream_info(device_url)
+    ret, fps, width, height = get_stream_info(device_url)
     if ret == False:
         print(f'Error probing {device_url}. Please make sure to put a correct video stream')
         return 1
     print(f'Input stream {device_url} with size of W: {width}, H: {height} at {fps} FPS')
+
+    # If resampling is True, we use resampling_fps for inferencing as well as sampling
+    if args.resampling:
+        fps = args.resampling_fps
+        print(f'Input will be resampled to {args.resampling_fps} FPS')
 
     print('Loading models...')
     o_detect, r_class = load_models(
@@ -339,7 +345,7 @@ def run(args):
             if do_sampling:
                 b = r_class.roi.roi.bounds
                 fourcc = cv2.VideoWriter_fourcc(*'mp4v')
-                out = cv2.VideoWriter("sample.mp4", fourcc, args.fps, (int(width), int(height)), True)
+                out = cv2.VideoWriter("sample.mp4", fourcc, fps, (int(width), int(height)), True)
 
             while True:
                 ret, frame = cap.read()
@@ -353,8 +359,8 @@ def run(args):
                     out.write(sample)
                 total_frames += 1
 
-                if total_frames % args.fps == 0:
-                    elapsed_time = timestamp + int((total_frames / args.fps)) * 1e9
+                if total_frames % fps == 0:
+                    elapsed_time = timestamp + int((total_frames / fps)) * 1e9
                     ##### traffic occupancy
                     occupancy = r_class.get_occupancy()
                     plugin.publish(
@@ -410,6 +416,10 @@ if __name__=='__main__':
         '-labels', dest='labels',
         action='store', default='detection/coco.names', type=str,
         help='Labels for detection')
+    parser.add_argument(
+        '-skip-second', dest='skip_second',
+        action='store', default=3., type=float,
+        help='Seconds to skip before recording')
     parser.add_argument(
         '-roi-name', dest='roi_name',
         action='store', type=str, default="incoming",

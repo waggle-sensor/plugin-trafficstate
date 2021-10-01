@@ -11,7 +11,7 @@ RUN pip3 install --no-cache-dir --upgrade -r /app/requirements.txt
 COPY deep_sort/ /app/deep_sort
 COPY detection/ /app/detection
 COPY tool/ /app/tool
-COPY app.py siamese_net.py /app/
+COPY app.py app_utils.py siamese_net.py /app/
 
 ARG SAGE_STORE_URL="https://osn.sagecontinuum.org"
 ARG BUCKET_ID_MODEL="cafb2b6a-8e1d-47c0-841f-3cad27737698"

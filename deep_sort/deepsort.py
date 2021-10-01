@@ -133,5 +133,5 @@ class deepsort_rbc():
         self.tracker.predict()
         self.tracker.update(dets)
 
-        return self.tracker, dets
+        return self.tracker
 

@@ -1,6 +1,6 @@
 name: "trafficstate"
 description: "Traffic State Estimator"
-version : "0.1.0"
+version : "0.0.0"
 namespace: "sage"
 authors: "Seongha Park <seongha.park@anl.gov>"
 collaborators: "Waggle Team <https://wa8.gl>"

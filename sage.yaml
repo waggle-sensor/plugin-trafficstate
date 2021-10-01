@@ -18,7 +18,7 @@ inputs:
   - id: "stream"
     type: "string"
   - id: "no-cuda"
-    type: "bool"
+    type: "boolean"
   - id: "duration"
     type: "float"
   - id: "fps"

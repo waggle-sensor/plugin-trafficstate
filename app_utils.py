@@ -39,5 +39,3 @@ class RegionOfInterest():
             (r, t)
         ])
         return self.roi.overlaps(obj)
-
-# def load_and_generate_config():

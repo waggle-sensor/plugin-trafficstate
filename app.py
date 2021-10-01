@@ -172,40 +172,44 @@ class RunClass():
         return cv2.cvtColor(frame, cv2.COLOR_RGB2BGR)
 
 
-def configure_and_load_models(args):
-    device_url = resolve_device(Path(args.stream))
-    cap = cv2.VideoCapture(args.stream)
-    cvfps = args.fps
-    width  = cap.get(cv2.CAP_PROP_FRAME_WIDTH)  # float
-    height = cap.get(cv2.CAP_PROP_FRAME_HEIGHT) # float
-    cap.release()
-    print(f'Input stream {device_url} with size of W: {width}, H: {height}')
+def get_stream_info(stream_url):
+    try:
+        input_probe = ffmpeg.probe(stream_url)
+        fps = eval(input_probe['streams'][0]['r_frame_rate'])
+        width = int(input_probe['streams'][0]['width'])
+        height = int(input_probe['streams'][0]['height'])
+        return True, fps, width, height
+    except:
+        return False, 0., 0, 0
 
-    use_cuda = False if args.no_cuda else True
+
+def load_models(width, height, fps, no_cuda, labels):
+    use_cuda = False if no_cuda else True
     print(f'CUDA: {use_cuda}')
-    
+
     print('Loading models...')
     o_detect = Yolov4Trck(use_cuda=use_cuda)
 
     #### deepsort model
     m_deepsort = call_deepsort(use_cuda=use_cuda)
     DSort = deepsort_rbc(m_deepsort, width, height, use_cuda=use_cuda)
-    r_class = RunClass(DSort, fps=cvfps, labels=args.labels)
+    r_class = RunClass(DSort, fps=fps, labels=labels)
     print('Done')
 
-    print('Configuring target area...')
-    #ret, config_filename = load_and_generate_config(args.config)
-    with open(args.config, 'r') as file:
-        loaded_config = json.load(file)
-    roi = RegionOfInterest(
-        loaded_config['regionofinterest'],
-        width,
-        height,
-        loaded_config['road_area'])
-    print(f'Boundary of the ROI: {roi.roi.bounds}')
-    r_class.set_roi(roi)
     return o_detect, r_class
 
+
+def get_region_of_interest(width, height, roi_name, roi_coordinates, roi_area):
+    try:
+        coordinates = [x.split(',') for x in roi_coordinates.strip().split(' ')]
+        roi = RegionOfInterest(
+            coordinates,
+            width,
+            height,
+            roi_area)
+        return True, roi
+    except Exception as ex:
+        return False, str(ex)
 
 """
     ffmpeg describes that 
@@ -268,9 +272,36 @@ def take_sample(stream, duration, skip_second, resampling, resampling_fps):
 
 
 def run(args):
-    print('Loading and configuring models...')
-    o_detect, r_class = configure_and_load_models(args)
+    device_url = resolve_device(args.stream)
+    ret, fps, widht, height = get_stream_info(device_url)
+    if ret == False:
+        print(f'Error probing {device_url}. Please make sure to put a correct video stream')
+        return 1
+    print(f'Input stream {device_url} with size of W: {width}, H: {height} at {fps} FPS')
+
+    print('Loading models...')
+    o_detect, r_class = load_models(
+        width=width,
+        height=height,
+        fps=fps,
+        no_cuda=args.no_cuda,
+        labels=args.labels
+    )
     print('Done')
+
+    print('Configuring target area...')
+    ret, roi = get_region_of_interest(
+        width=width,
+        height=height,
+        roi_name=args.roi_name,
+        roi_coordinates=args.roi_coordinates,
+        roi_area=args.roi_area
+    )
+    if ret == False:
+        print(f'Could not configure region of interest: {roi}. Exiting...')
+        return 1
+    r_class.set_roi(roi)
+    print(f'Boundary of the ROI: {roi.roi.bounds}')
 
     sampling_countdown = -1
     if args.sampling_interval > -1:
@@ -381,15 +412,23 @@ if __name__=='__main__':
         help='Labels for detection')
     parser.add_argument(
         '-roi-name', dest='roi_name',
-        action='store', type=str,
+        action='store', type=str, default="incoming",
         help='Name of RoI used when publishing data')
     parser.add_argument(
+        '-roi-area', dest='roi_area',
+        action='store', type=float, default=60.,
+        help='The area of the RoI in m^2')
+    parser.add_argument(
         '-roi-coordinates', dest='roi_coordinates',
-        action='store', type=str,
-        help='Coordinates of RoI with X,Ys in relative values of (0. - 1.)')
+        action='store', type=str, default="0.3,0.3 0.6,0.3 0.6,0.6 0.3,0.6",
+        help="""
+X,Y Coordinates of RoI in relative values of (0. - 1.)
+WARNING: the coordinates must be in the order which adjacent points are connected 
+         and the coordinates make a completely closed region
+""")
     parser.add_argument(
         '-sampling-interval', dest='sampling_interval',
         action='store', default=-1, type=int,
         help='Inferencing interval for sampling results')
     args = parser.parse_args()
-    run(args)
+    exit(run(args))

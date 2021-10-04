@@ -91,7 +91,7 @@ class RunClass():
         # accumulate the area
         name = self.class_names[outclass]
         #print(f'{name} recognized in {t}, {b}, {r}, {l}')
-        if self.roi.contains(t, b, r, l):
+        if self.roi.contains_center_of_mass(t, b, r, l):
             #print(f'{name} is contained inside the ROI')
             if 'car' in name:
                 self.occupancy_area += 4.5 * 1.7
@@ -110,7 +110,7 @@ class RunClass():
     def calculate_speed(self, t, b, r, l, id_num):
         # Count frames while id_num touches or is in the ROI
         # If id_num was counted and no longer inside the ROI, then indicate it exited the ROI
-        if self.roi.contains(t, b, r, l) or self.roi.overlaps(t, b, r, l):
+        if self.roi.contains_center_of_mass(t, b, r, l) or self.roi.overlaps(t, b, r, l):
             if id_num not in self.speed:
                 self.speed[id_num] = 1
             else:

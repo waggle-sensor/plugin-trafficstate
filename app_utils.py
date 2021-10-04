@@ -22,6 +22,15 @@ class RegionOfInterest():
         self.height = image_height
         self.road_area = road_area
 
+    def contains_center_of_mass(self, t, b, r, l):
+        obj = Polygon([
+            (l, t),
+            (l, b),
+            (r, b),
+            (r, t)
+        ])
+        return self.roi.contains(obj.centroid)
+
     def contains(self, t, b, r, l):
         obj = Polygon([
             (l, t),

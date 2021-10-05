@@ -87,8 +87,7 @@ class deepsort_rbc():
         if boxes == None or boxes == []:
             self.tracker.predict()
             print('no detections')
-            trackers = self.tracker.tracks
-            return trackers
+            return self.tracker
 
         if self.use_cuda:
             processed_crops = self.pre_process(frame, boxes).cuda()

@@ -6,7 +6,7 @@ import time
 import argparse
 import json
 from pathlib import Path
-from app_utils import RegionOfInterest
+from app_utils import RegionOfInterest, get_coordinates
 
 from tool.utils import *
 from tool.torch_utils import do_detect
@@ -77,7 +77,7 @@ class RunClass():
     def calculate_flow(self, t, b, r, l, id_num):
         # Add id_num if the box (t, b, r, l) is entering the ROI
         ret = False
-        if self.roi.overlaps(t, b, r, l):
+        if self.roi.loi_intersects(t, b, r, l):
             ret = True
             if id_num not in self.flow:
                 self.flow.append(id_num)
@@ -197,7 +197,7 @@ def load_models(width, height, fps, no_cuda, labels):
     return o_detect, r_class
 
 
-def get_region_of_interest(width, height, roi_name, roi_coordinates, roi_area):
+def get_region_of_interest(width, height, roi_name, roi_coordinates, roi_area, loi_coordinates):
     try:
         coordinates = []
         for c in roi_coordinates.strip().split(' '):
@@ -207,7 +207,8 @@ def get_region_of_interest(width, height, roi_name, roi_coordinates, roi_area):
             coordinates,
             width,
             height,
-            roi_area)
+            roi_area
+            loi_coordinates)
         return True, roi
     except Exception as ex:
         return False, str(ex)
@@ -301,7 +302,8 @@ def run(args):
         height=height,
         roi_name=args.roi_name,
         roi_coordinates=args.roi_coordinates,
-        roi_area=args.roi_area
+        roi_area=args.roi_area,
+        loi_coordinates=args.loi_coordinates
     )
     if ret == False:
         print(f'Could not configure region of interest: {roi}. Exiting...')
@@ -343,7 +345,6 @@ def run(args):
             height = cap.get(cv2.CAP_PROP_FRAME_HEIGHT) # float
 
             if do_sampling:
-                b = r_class.roi.roi.bounds
                 fourcc = cv2.VideoWriter_fourcc(*'mp4v')
                 out = cv2.VideoWriter("sample.mp4", fourcc, fps, (int(width), int(height)), True)
 
@@ -355,7 +356,9 @@ def run(args):
                 result = o_detect.run_yolov4(frame)
                 sample = r_class.run_dsort(result, frame)
                 if do_sampling:
-                    sample = cv2.rectangle(sample, (int(b[0]), int(b[1])), (int(b[2]), int(b[3])), (255, 0, 0), 2)
+                    coordinates = get_coordinates()
+                    sample = cv2.polylines(sample, coordinates, 
+                      True, (255, 0, 0), 2)
                     out.write(sample)
                 total_frames += 1
 
@@ -424,6 +427,10 @@ if __name__=='__main__':
         '-roi-name', dest='roi_name',
         action='store', type=str, default="incoming",
         help='Name of RoI used when publishing data')
+    parser.add_argument(
+        '-loi-coordinates', dest='loi_coordinates',
+        action='store', type=str, default="0.3,0.3, 0.6,0.3",
+        help='X,Y Coordinates of Line of interest for flow calculation')
     parser.add_argument(
         '-roi-area', dest='roi_area',
         action='store', type=float, default=60.,

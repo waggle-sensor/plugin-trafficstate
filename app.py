@@ -6,7 +6,7 @@ import time
 import argparse
 import json
 from pathlib import Path
-from app_utils import RegionOfInterest, get_coordinates
+from app_utils import RegionOfInterest
 
 from tool.utils import *
 from tool.torch_utils import do_detect
@@ -207,7 +207,7 @@ def get_region_of_interest(width, height, roi_name, roi_coordinates, roi_area, l
             coordinates,
             width,
             height,
-            roi_area
+            roi_area,
             loi_coordinates)
         return True, roi
     except Exception as ex:
@@ -356,7 +356,7 @@ def run(args):
                 result = o_detect.run_yolov4(frame)
                 sample = r_class.run_dsort(result, frame)
                 if do_sampling:
-                    coordinates = get_coordinates()
+                    coordinates = RegionOfInterest.get_coordinates()
                     sample = cv2.polylines(sample, coordinates, 
                       True, (255, 0, 0), 2)
                     out.write(sample)

@@ -200,6 +200,10 @@ def load_models(width, height, fps, no_cuda, labels):
 def get_region_of_interest(width, height, roi_name, roi_coordinates, roi_area, loi_coordinates):
     try:
         coordinates = []
+        loi = []
+        for c in loi_coordinates.strip().split(' '):
+            x, y = c.split(',')
+            loi.append((float(x), float(y)))
         for c in roi_coordinates.strip().split(' '):
             x, y = c.split(',')
             coordinates.append((float(x), float(y)))
@@ -208,7 +212,7 @@ def get_region_of_interest(width, height, roi_name, roi_coordinates, roi_area, l
             width,
             height,
             roi_area,
-            loi_coordinates)
+            loi)
         return True, roi
     except Exception as ex:
         return False, str(ex)

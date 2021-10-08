@@ -30,7 +30,9 @@ class RegionOfInterest():
 
     def get_coordinates(self):
         x, y = self.roi.exterior.coords.xy
-        return list(zip(map(int,x.tolist()), map(int,y.tolist())))
+        a = list(zip(map(int,x.tolist()), map(int,y.tolist())))
+        res = [list(ele) for ele in a]
+        return np.int32([np.array(res)])
 
     def contains_center_of_mass(self, t, b, r, l):
         obj = Polygon([

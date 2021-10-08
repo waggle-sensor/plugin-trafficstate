@@ -356,7 +356,7 @@ def run(args):
                 result = o_detect.run_yolov4(frame)
                 sample = r_class.run_dsort(result, frame)
                 if do_sampling:
-                    coordinates = RegionOfInterest.get_coordinates()
+                    coordinates = r_class.roi.get_coordinates()
                     sample = cv2.polylines(sample, coordinates, 
                       True, (255, 0, 0), 2)
                     out.write(sample)

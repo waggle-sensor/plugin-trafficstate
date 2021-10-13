@@ -363,6 +363,9 @@ def run(args):
                     coordinates = r_class.roi.get_coordinates()
                     sample = cv2.polylines(sample, coordinates, 
                       True, (255, 0, 0), 2)
+                    coordinates = r_class.roi.get_loi()
+                    sample = cv2.polylines(sample, coordinates, 
+                      True, (0, 0, 255), 4)
                     out.write(sample)
                 total_frames += 1
 

@@ -26,7 +26,7 @@ class RegionOfInterest():
             actual_coordinates.append(
                 (int(c[0] * image_width), int(c[1] * image_height))
             )
-        self.loi = LineString(loi_coordinates)
+        self.loi = LineString(actual_coordinates)
 
     def get_coordinates(self):
         x, y = self.roi.exterior.coords.xy

@@ -33,6 +33,12 @@ class RegionOfInterest():
         a = list(zip(map(int,x.tolist()), map(int,y.tolist())))
         res = [list(ele) for ele in a]
         return np.int32([np.array(res)])
+    
+    def get_loi(self):
+        x, y = self.loi.xy
+        a = list(zip(map(int,x.tolist()), map(int,y.tolist())))
+        res = [list(ele) for ele in a]
+        return np.int32([np.array(res)])
 
     def contains_center_of_mass(self, t, b, r, l):
         obj = Polygon([

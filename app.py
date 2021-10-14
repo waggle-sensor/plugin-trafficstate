@@ -130,7 +130,7 @@ class RunClass():
             # the vehicle traveled the distance of the ROI within the counted frames
             if counted_frames < 0:
                 delta_t = -1 * counted_frames / self.fps
-                delta_d = self.roi.road_area
+                delta_d = self.roi.road_length
                 sum_speed += delta_d / delta_t * 3.6 # m/s to km/h
         return 0. if len(self.speed.keys()) == 0 else sum_speed / len(self.speed.keys())
 
@@ -200,7 +200,7 @@ def load_models(width, height, fps, no_cuda, labels):
     return o_detect, r_class
 
 
-def get_region_of_interest(width, height, roi_name, roi_coordinates, roi_area, loi_coordinates):
+def get_region_of_interest(width, height, roi_name, roi_coordinates, roi_area, roi_length, loi_coordinates):
     try:
         coordinates = []
         loi = []
@@ -215,6 +215,7 @@ def get_region_of_interest(width, height, roi_name, roi_coordinates, roi_area, l
             width,
             height,
             roi_area,
+            roi_length,
             loi)
         return True, roi
     except Exception as ex:
@@ -281,7 +282,7 @@ def take_sample(stream, duration, skip_second, resampling, resampling_fps):
 
 
 def run(args):
-    device_url = resolve_device(args.stream)
+    device_url = resolve_device(Path(args.stream))
     ret, fps, width, height = get_stream_info(device_url)
     if ret == False:
         print(f'Error probing {device_url}. Please make sure to put a correct video stream')
@@ -310,6 +311,7 @@ def run(args):
         roi_name=args.roi_name,
         roi_coordinates=args.roi_coordinates,
         roi_area=args.roi_area,
+        roi_length=args.roi_length,
         loi_coordinates=args.loi_coordinates
     )
     if ret == False:
@@ -328,7 +330,7 @@ def run(args):
     while True:
         print(f'Grabbing video for {args.duration} seconds')
         ret, filename, timestamp = take_sample(
-            stream=args.stream,
+            stream=Path(args.stream),
             duration=args.duration,
             skip_second=args.skip_second,
             resampling=args.resampling,
@@ -400,7 +402,8 @@ def run(args):
             print(f'{datetime.fromtimestamp(timestamp / 1.e9)} Traffic speed: {averaged_speed}')
         if do_sampling:
             out.release()
-            plugin.upload_file("sample.mp4")
+            #plugin.upload_file("sample.mp4")
+            exit(0)
         r_class.clean_up()
         print('Tracker is cleaned up for next analysis')
 
@@ -445,6 +448,10 @@ if __name__=='__main__':
         '-roi-area', dest='roi_area',
         action='store', type=float, default=60.,
         help='The area of the RoI in m^2')
+    parser.add_argument(
+        '-roi-length', dest='roi_length',
+        action='store', type=float, default=60.,
+        help='The length of the RoI in m')
     parser.add_argument(
         '-roi-coordinates', dest='roi_coordinates',
         action='store', type=str, default="0.3,0.3 0.6,0.3 0.6,0.6 0.3,0.6",

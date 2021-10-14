@@ -9,7 +9,7 @@ class RegionOfInterest():
         @image_height: height of actual image
         @road_length: actual road distance (m) of the ROI parallel to the direction of traffic
     """
-    def __init__(self, coordinates, image_width, image_height, road_area, loi_coordinates):
+    def __init__(self, coordinates, image_width, image_height, road_area, road_length, loi_coordinates):
         actual_coordinates = []
         for c in coordinates:
             actual_coordinates.append(
@@ -21,6 +21,7 @@ class RegionOfInterest():
         self.width = image_width
         self.height = image_height
         self.road_area = road_area
+        self.road_length = road_length
         actual_coordinates = []
         for c in loi_coordinates:
             actual_coordinates.append(
@@ -33,7 +34,7 @@ class RegionOfInterest():
         a = list(zip(map(int,x.tolist()), map(int,y.tolist())))
         res = [list(ele) for ele in a]
         return np.int32([np.array(res)])
-    
+
     def get_loi(self):
         x, y = self.loi.xy
         a = list(zip(map(int,x.tolist()), map(int,y.tolist())))

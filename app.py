@@ -110,7 +110,7 @@ class RunClass():
     def calculate_speed(self, t, b, r, l, id_num):
         # Start counting frames when a vehicle touches LoI until it is within the RoI
         # When the vehicle leaves the RoI mark it (-, negative sign) to calculate the speed later
-        if self.roi.loi_intersects(t, b, r, l):
+        if self.roi.loi_intersects(t, b, r, l) and self.roi.contains_center_of_mass(t, b, r, l):
             if id_num not in self.speed:
                 self.speed[id_num] = 1
             else:

@@ -108,15 +108,18 @@ class RunClass():
         return self.occupancy_area / self.roi.road_area / self.fps
 
     def calculate_speed(self, t, b, r, l, id_num):
-        # Count frames while id_num touches or is in the ROI
-        # If id_num was counted and no longer inside the ROI, then indicate it exited the ROI
-        if self.roi.contains_center_of_mass(t, b, r, l) or self.roi.overlaps(t, b, r, l):
+        # Start counting frames when a vehicle touches LoI until it is within the RoI
+        # When the vehicle leaves the RoI mark it (-, negative sign) to calculate the speed later
+        if self.roi.loi_intersects(t, b, r, l):
             if id_num not in self.speed:
                 self.speed[id_num] = 1
             else:
                 self.speed[id_num] += 1
-        else:
+        elif self.roi.contains_center_of_mass(t, b, r, l):
             if id_num in self.speed:
+                self.speed[id_num] += 1
+        else:
+            if id_num in self.speed and self.speed[id_num] > 0:
                 self.speed[id_num] *= -1
 
     def get_averaged_speed(self):

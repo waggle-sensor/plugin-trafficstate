@@ -284,10 +284,10 @@ def take_sample(stream, duration, skip_second, resampling, resampling_fps):
 
 def run(args):
     timestamp = time.time()
-    plugin.publish(TOPIC_CLOUDCOVER, 'Traffic State Estimator: Getting Video', timestamp=timestamp)
+    plugin.publish('traffic.state.log', 'Traffic State Estimator: Getting Video', timestamp=timestamp)
     print(f"Getting Video at time: {timestamp}")
 
-    device_url = resolve_device(args.stream)
+    device_url = resolve_device(Path(args.stream))
     ret, fps, width, height = get_stream_info(device_url)
     if ret == False:
         print(f'Error probing {device_url}. Please make sure to put a correct video stream')
@@ -300,7 +300,7 @@ def run(args):
         print(f'Input will be resampled to {args.resampling_fps} FPS')
 
     timestamp = time.time()
-    plugin.publish(TOPIC_CLOUDCOVER, 'Traffic State Estimator: Loading Models', timestamp=timestamp)
+    plugin.publish('traffic.state.log', 'Traffic State Estimator: Loading Models', timestamp=timestamp)
     print(f"Loading Models at time: {timestamp}")
 
     print('Loading models...')
@@ -335,7 +335,7 @@ def run(args):
         sampling_countdown = args.sampling_interval
 
     timestamp = time.time()
-    plugin.publish(TOPIC_CLOUDCOVER, 'Traffic State Estimator: Starting Estimation', timestamp=timestamp)
+    plugin.publish('traffic.state.log', 'Traffic State Estimator: Starting Estimation', timestamp=timestamp)
     print(f"Starting Estimation at time: {timestamp}")
 
     print('Starting traffic state estimation..')
@@ -343,7 +343,7 @@ def run(args):
     while True:
         print(f'Grabbing video for {args.duration} seconds')
         ret, filename, timestamp = take_sample(
-            stream=args.stream,
+            stream=Path(args.stream),
             duration=args.duration,
             skip_second=args.skip_second,
             resampling=args.resampling,

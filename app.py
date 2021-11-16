@@ -370,10 +370,13 @@ def run(args):
                 fourcc = cv2.VideoWriter_fourcc(*'mp4v')
                 out = cv2.VideoWriter("sample.mp4", fourcc, fps, (int(width), int(height)), True)
 
+            c = 0
             while True:
                 ret, frame = cap.read()
                 if ret == False:
                     break
+                c += 1
+                print(c)
 
                 result = o_detect.run_yolov4(frame)
                 sample = r_class.run_dsort(result, frame)
@@ -418,6 +421,8 @@ def run(args):
             plugin.upload_file("sample.mp4")
         r_class.clean_up()
         print('Tracker is cleaned up for next analysis')
+
+        exit(0)
 
 
 if __name__=='__main__':

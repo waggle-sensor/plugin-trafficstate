@@ -20,6 +20,7 @@ from waggle import plugin
 from waggle.data.vision import VideoCapture, resolve_device
 from waggle.data.timestamp import get_timestamp
 
+import time
 
 class Yolov4Trck():
     def __init__(self, use_cuda, cfgfile='yolov4.cfg', weightfile='yolov4.weights'):
@@ -282,7 +283,11 @@ def take_sample(stream, duration, skip_second, resampling, resampling_fps):
 
 
 def run(args):
-    device_url = resolve_device(Path(args.stream))
+    timestamp = time.time()
+    plugin.publish(TOPIC_CLOUDCOVER, 'Traffic State Estimator: Getting Video', timestamp=timestamp)
+    print(f"Getting Video at time: {timestamp}")
+
+    device_url = resolve_device(args.stream)
     ret, fps, width, height = get_stream_info(device_url)
     if ret == False:
         print(f'Error probing {device_url}. Please make sure to put a correct video stream')
@@ -293,6 +298,10 @@ def run(args):
     if args.resampling:
         fps = args.resampling_fps
         print(f'Input will be resampled to {args.resampling_fps} FPS')
+
+    timestamp = time.time()
+    plugin.publish(TOPIC_CLOUDCOVER, 'Traffic State Estimator: Loading Models', timestamp=timestamp)
+    print(f"Loading Models at time: {timestamp}")
 
     print('Loading models...')
     o_detect, r_class = load_models(
@@ -325,12 +334,16 @@ def run(args):
         print(f'Input video will be sampled every {args.sampling_interval}th inferencing')
         sampling_countdown = args.sampling_interval
 
+    timestamp = time.time()
+    plugin.publish(TOPIC_CLOUDCOVER, 'Traffic State Estimator: Starting Estimation', timestamp=timestamp)
+    print(f"Starting Estimation at time: {timestamp}")
+
     print('Starting traffic state estimation..')
     plugin.init()
     while True:
         print(f'Grabbing video for {args.duration} seconds')
         ret, filename, timestamp = take_sample(
-            stream=Path(args.stream),
+            stream=args.stream,
             duration=args.duration,
             skip_second=args.skip_second,
             resampling=args.resampling,
@@ -402,8 +415,7 @@ def run(args):
             print(f'{datetime.fromtimestamp(timestamp / 1.e9)} Traffic speed: {averaged_speed}')
         if do_sampling:
             out.release()
-            #plugin.upload_file("sample.mp4")
-            exit(0)
+            plugin.upload_file("sample.mp4")
         r_class.clean_up()
         print('Tracker is cleaned up for next analysis')
 

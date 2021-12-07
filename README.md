@@ -32,3 +32,9 @@ The code requires some of input parameters (you can see the parameters in the ap
 -	-roi-coordinates: coordinate of region of interest in ratio in the image
 
 The loi-coordinate and roi-coordinate are the positions pointing our region of interest in the ratio. So for example if we want to see the vehicles that drive through a rectangle shaped from (0,0) to (256,256) in 512x512 image, then the input must be (0,0 0.5,0 0.5,0.5 0,0.5). It is the same with the line of interest.
+
+## funding
+[NSF 1935984](https://www.nsf.gov/awardsearch/showAward?AWD_ID=1935984)
+
+## collaborators
+Bhupendra Raut, Dario Dematties Reyes, Joseph Swantek, Neal Conrad, Nicola Ferrier, Pete Beckman, Raj Sankaran, Robert Jackson, Scott Collis, Sean Shahkarami, Seongha ParkSergey Shemyakin, Wolfgang Gerlach, Yongho kim

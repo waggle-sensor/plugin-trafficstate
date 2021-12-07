@@ -9,6 +9,28 @@ The application first records video for 30 seconds to analyze traffic state. Bec
 
 We set a region of interest (ROI), and the ROI is the boundary for all traffic state calculations. We count the number of vehicles that are passing through the ROI for traffic flow calculation. To calculate traffic occupancy, we identify the type of the tacklets (car, truck, and bus) and measure occupied area over the ROI. For traffic speed calculation, we count the number of frames that each vehicle passes from one end of ROI to the other.
 
+# Using the code
+Output: traffic flow, occupancy, and speed (vehicles/sec, occupied area ratio (0-1), and km/h)  
+Input: 10 second video (12 fps, total 120 frames)  
+Image resolution (YOLOv4 input resolution): 512x512  
+Inference time (from object detection to tracking for the whole video):  
+Model loading time (for both YOLO v4 and DeepSORT):  
+
+# Arguments
+   '-no-cuda': Do not use CUDA  
+   '-stream': ID or name of a stream, e.g. top-camera  
+   '-duration': Time duration for input video (default = 10)  
+   '-resampling':  Resampling the sample to -resample-fps option (default = 12)  
+   '-resampling-fps': Frames per second for input video (default = 12)  
+   '-labels': Labels for detection (default = 'detection/coco.names')  
+   '-skip-second': Seconds to skip before recording (default = 3)  
+   '-roi-name': Name of RoI used when publishing data (default = “incoming”)  
+   '-loi-coordinates': X,Y Coordinates of Line of interest for flow calculation (default="0.3,0.3, 0.6,0.3")  
+   '-roi-area': The area of the RoI in m^2 (default = 60)  
+   '-roi-length': The length of the RoI in m (default = 60)  
+   '-roi-coordinates': X,Y Coordinates of RoI in relative values of (0. - 1.) WARNING: the coordinates must be in the order which adjacent points are connected and the coordinates make a completely closed region (default = "0.3,0.3 0.6,0.3 0.6,0.6 0.3,0.6")  
+   '-sampling-interval': Inferencing interval for sampling results (default = -1, no samping)  
+
 
  
 # References

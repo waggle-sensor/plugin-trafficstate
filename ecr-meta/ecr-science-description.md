@@ -31,6 +31,8 @@ Model loading time (for both YOLO v4 and DeepSORT):
    '-roi-coordinates': X,Y Coordinates of RoI in relative values of (0. - 1.) WARNING: the coordinates must be in the order which adjacent points are connected and the coordinates make a completely closed region (default = "0.3,0.3 0.6,0.3 0.6,0.6 0.3,0.6")  
    '-sampling-interval': Inferencing interval for sampling results (default = -1, no samping)  
 
+# Ontology:
+The code publishes measurements with optic ‘env.traffic.STATE’, where ‘STATE’ is the state calculated (flow, occupancy, and speed).
 
  
 # References

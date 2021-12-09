@@ -459,7 +459,7 @@ if __name__=='__main__':
         help='Name of RoI used when publishing data')
     parser.add_argument(
         '-loi-coordinates', dest='loi_coordinates',
-        action='store', type=str, default="0.3,0.3, 0.6,0.3",
+        action='store', type=str, default="0.3,0.3 0.6,0.3",
         help='X,Y Coordinates of Line of interest for flow calculation')
     parser.add_argument(
         '-roi-area', dest='roi_area',

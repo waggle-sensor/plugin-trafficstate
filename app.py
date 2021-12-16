@@ -249,6 +249,10 @@ def take_sample(stream, duration, skip_second, resampling, resampling_fps):
     if resampling:
         print(f'Resampling to {resampling_fps}...')
         d = ffmpeg.filter(d, 'fps', fps=resampling_fps)
+        d = ffmpeg.output(d, filename, f='mp4', t=duration).overwrite_output()
+    else:
+        d = ffmpeg.output(d, filename, codec="copy", f='mp4', t=duration).overwrite_output()
+
     d = ffmpeg.output(d, filename, f='mp4', t=duration).overwrite_output()
     print(d.compile())
     d.run(quiet=True)

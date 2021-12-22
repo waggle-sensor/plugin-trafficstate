@@ -253,7 +253,6 @@ def take_sample(stream, duration, skip_second, resampling, resampling_fps):
     else:
         d = ffmpeg.output(d, filename, codec="copy", f='mp4', t=duration).overwrite_output()
 
-    d = ffmpeg.output(d, filename, f='mp4', t=duration).overwrite_output()
     print(d.compile())
     d.run(quiet=True)
     # TODO: We may want to inspect whether the ffmpeg commands succeeded

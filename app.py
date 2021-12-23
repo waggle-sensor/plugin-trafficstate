@@ -147,6 +147,7 @@ class RunClass():
         frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
         frame = frame.astype(np.uint8)
 
+        print(len(boxes), frame.shape)
         tracker = self.DSort.a_run_deep_sort(frame, boxes)
 
         for track in tracker.tracks:

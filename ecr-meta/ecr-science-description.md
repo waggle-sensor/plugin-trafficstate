@@ -35,6 +35,25 @@ Model loading time (for both YOLO v4 and DeepSORT):
 The code publishes measurements with optic ‘env.traffic.STATE’, where ‘STATE’ is the state calculated (flow, occupancy, and speed).
 
  
+# Inference from Sage codes
+To query the output from the plugin, you can do with python library 'sage_data_client':
+```
+import sage_data_client
+
+# query and load data into pandas data frame
+df = sage_data_client.query(
+    start="-1h",
+    filter={
+        "name": "env.traffic.flow",
+    }
+)
+
+# print results in data frame
+print(df)
+```
+For more information, please see [Access and use data documentation](https://docs.sagecontinuum.org/docs/tutorials/accessing-data) and [sage_data_client](https://pypi.org/project/sage-data-client/).
+
+
 # References
 [1] Fred L. Hall, "Traffic stream characteristics," Traffic Flow Theory, US Federal Highway Administration, 36, 1996.  
 [2] Leslie C. Edie “Discussion of traffic stream measurements and definitions,” New York: Port of New York Authority, 1963.  

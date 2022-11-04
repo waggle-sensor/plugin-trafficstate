@@ -1,16 +1,12 @@
 import tensorrt as trt
-#import pycuda.autoinit
+import pycuda.autoinit
 import pycuda.driver as cuda
 import numpy as np
 import cv2
 
-cuda.init()
 
 class BaseEngine(object):
     def __init__(self, engine_path, imgsz=(640,640)):
-
-        self.cuda_ctx = cuda.Device(0).make_context()
-
         self.imgsz = imgsz
         self.mean = None
         self.std = None
@@ -64,6 +60,7 @@ class BaseEngine(object):
         data = [out['host'] for out in self.outputs]
         return data
 
+
     def detect_video(self, video_path, conf=0.5, end2end=False):
         cap = cv2.VideoCapture(video_path)
         fourcc = cv2.VideoWriter_fourcc(*'XVID')
@@ -104,25 +101,12 @@ class BaseEngine(object):
         cap.release()
         cv2.destroyAllWindows()
 
+
     def inference(self, img_path, conf=0.5, end2end=False):
         #origin_img = cv2.imread(img_path)
         origin_img = img_path
         img, ratio = preproc(origin_img, self.imgsz, self.mean, self.std)
-
-
-
-
-        self.cuda_ctx.push()
-
         data = self.infer(img)
-
-        self.cuda_ctx.pop()
-
-
-
-
-
-
         if end2end:
             num, final_boxes, final_scores, final_cls_inds = data
             final_boxes = np.reshape(final_boxes/ratio, (-1, 4))
@@ -132,13 +116,6 @@ class BaseEngine(object):
             dets = self.postprocess(predictions,ratio)
 
         return dets
-
-        if dets is not None:
-            final_boxes, final_scores, final_cls_inds = dets[:,
-                                                             :4], dets[:, 4], dets[:, 5]
-            origin_img = vis(origin_img, final_boxes, final_scores, final_cls_inds,
-                             conf=conf, class_names=self.class_names)
-        return origin_img
 
     @staticmethod
     def postprocess(predictions, ratio):
@@ -232,7 +209,7 @@ def preproc(image, input_size, mean, std, swap=(2, 0, 1)):
         interpolation=cv2.INTER_LINEAR,
     ).astype(np.float32)
     padded_img[: int(img.shape[0] * r), : int(img.shape[1] * r)] = resized_img
-    # if use yolox set 
+    # if use yolox set
     # padded_img = padded_img[:, :, ::-1]
     # padded_img /= 255.0
     padded_img = padded_img[:, :, ::-1]
@@ -349,8 +326,7 @@ def vis(img, boxes, scores, cls_ids, conf=0.5, class_names=None):
         txt_color = (0, 0, 0) if np.mean(_COLORS[cls_id]) > 0.5 else (255, 255, 255)
         font = cv2.FONT_HERSHEY_SIMPLEX
 
-        #txt_size = cv2.getTextSize(text, font, 0.4, 1)[0]
-        txt_size = cv2.getTextSize(text, font, 1, 1)[0]
+        txt_size = cv2.getTextSize(text, font, 0.4, 1)[0]
         cv2.rectangle(img, (x0, y0), (x1, y1), color, 2)
 
         txt_bk_color = (_COLORS[cls_id] * 255 * 0.7).astype(np.uint8).tolist()
@@ -361,7 +337,6 @@ def vis(img, boxes, scores, cls_ids, conf=0.5, class_names=None):
             txt_bk_color,
             -1
         )
-        #cv2.putText(img, text, (x0, y0 + txt_size[1]), font, 0.4, txt_color, thickness=1)
-        cv2.putText(img, text, (x0, y0 + txt_size[1]), font, 1, txt_color, thickness=1)
+        cv2.putText(img, text, (x0, y0 + txt_size[1]), font, 0.4, txt_color, thickness=1)
 
     return img

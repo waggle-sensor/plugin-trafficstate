@@ -1,13 +1,12 @@
 from __future__ import print_function
 
 import numpy as np
-
 import time
 import argparse
-
 import cv2
 
 from utils_trt.utils import BaseEngine
+from app_utils import RegionOfInterest
 
 from sort import *
 
@@ -125,6 +124,27 @@ class RunClass():
         return cv2.cvtColor(frame, cv2.COLOR_RGB2BGR)
 
 
+def get_region_of_interest(width, height, roi_name, roi_coordinates, roi_area, roi_length, loi_coordinates):
+    try:
+        coordinates = []
+        loi = []
+        for c in loi_coordinates.strip().split(' '):
+            x, y = c.split(',')
+            loi.append((float(x), float(y)))
+        for c in roi_coordinates.strip().split(' '):
+            x, y = c.split(',')
+            coordinates.append((float(x), float(y)))
+        roi = RegionOfInterest(
+            coordinates,
+            width,
+            height,
+            roi_area,
+            roi_length,
+            loi)
+        return True, roi
+    except Exception as ex:
+        return False, str(ex)
+
 def parse_args():
     """Parse input arguments."""
     parser = argparse.ArgumentParser(description='SORT demo')
@@ -163,7 +183,7 @@ if __name__ == '__main__':
     cap = cv2.VideoCapture(args.input_video)
     fps = int(cap.get(cv2.CAP_PROP_FPS))
     ret, frame = cap.read()
-    h, w, c = frame.shape
+    height, width, c = frame.shape
 
     pred = Predictor(engine_path=args.engine)
 
@@ -175,6 +195,23 @@ if __name__ == '__main__':
                        min_hits=args.min_hits,
                        iou_threshold=args.iou_threshold) #create instance of the SORT tracker
     r_class = RunClass(fps, args.labels)
+
+    print('Configuring target area...')
+    ret, roi = get_region_of_interest(
+        width=width,
+        height=height,
+        roi_name=args.roi_name,
+        roi_coordinates=args.roi_coordinates,
+        roi_area=args.roi_area,
+        roi_length=args.roi_length,
+        loi_coordinates=args.loi_coordinates
+    )
+    if ret == False:
+        print(f'Could not configure region of interest: {roi}. Exiting...')
+        exit(1)
+    r_class.set_roi(roi)
+    print(f'Boundary of the ROI: {roi.roi.bounds}')
+
 
     fourcc = cv2.VideoWriter_fourcc(*'mp4v')
     out = cv2.VideoWriter('result.mp4', fourcc, fps, (int(w), int(h)), True)

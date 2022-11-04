@@ -46,10 +46,9 @@ class RunClass():
     def get_flow(self):
         return len(self.flow)
 
-    def calculate_density(self, t, b, r, l, outclass):
+    def calculate_density(self, t, b, r, l, name):
         # Calculate occupancy area of the class and
         # accumulate the area
-        name = self.class_names[outclass]
         #print(f'{name} recognized in {t}, {b}, {r}, {l}')
         if self.roi.contains_center_of_mass(t, b, r, l):
             #print(f'{name} is contained inside the ROI')
@@ -117,9 +116,9 @@ class RunClass():
             if self.calculate_flow(t, b, r, l, id_num):
                 frame = cv2.rectangle(frame, (int(l), int(t)), (int(r), int(b)), (255, 0, 0), 2)
             else:
-                frame = cv2.rectangle(frame, (int(l), int(t)), (int(r), int(b)), (0, 255, 0), 2)
+                frame = cv2.rectangle(frame, (int(l), int(t)), (int(r), int(b)), (0, 255, 0), 2)\
 
-            self.calculate_density(t, b, r, l, track.outclass)
+            self.calculate_density(t, b, r, l, name)
             self.calculate_speed(t, b, r, l, id_num)
         return cv2.cvtColor(frame, cv2.COLOR_RGB2BGR)
 

@@ -11,10 +11,17 @@ from utils_trt.utils import BaseEngine
 
 from sort import *
 
+def load_class_names(namesfile):
+    class_names = []
+    with open(namesfile, 'r') as fp:
+        lines = fp.readlines()
+    for line in lines:
+        line = line.rstrip()
+        class_names.append(line)
+    return class_names
 
 class RunClass():
-    def __init__(self, DSort, fps, labels):
-        self.DSort = DSort
+    def __init__(self, fps, labels):
         self.flow = []
         self.occupancy_area = 0
         self.density_frames = 0
@@ -98,6 +105,7 @@ class RunClass():
 
     def run(self, trackers, frame):
         for track in trackers:
+            print(track)
             id_num = track[4] #Get the ID for the particular track.
             l = track[0]  ## x1
             t = track[1]  ## y1
@@ -135,7 +143,7 @@ def parse_args():
     # Data
     parser.add_argument("--input-video", type=str, required=True, help="path to dataset")
     parser.add_argument('--labels', dest='labels',
-                        action='store', default='yolov4/coco.names', type=str,
+                        action='store', default='coco.names', type=str,
                         help='Labels for detection')
     parser.add_argument('--conf-thresh', type=float, default=0.4)
     return parser.parse_args()
@@ -166,7 +174,7 @@ if __name__ == '__main__':
     mot_tracker = Sort(max_age=args.max_age,
                        min_hits=args.min_hits,
                        iou_threshold=args.iou_threshold) #create instance of the SORT tracker
-    r_class = RunClass()
+    r_class = RunClass(fps, args.labels)
 
     fourcc = cv2.VideoWriter_fourcc(*'mp4v')
     out = cv2.VideoWriter('result.mp4', fourcc, fps, (int(w), int(h)), True)

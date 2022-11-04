@@ -163,6 +163,7 @@ def parse_args():
     parser.add_argument('--labels', dest='labels',
                         action='store', default='coco.names', type=str,
                         help='Labels for detection')
+    parser.add_argument("--detection-threshold", dest='det_thr', type=float, default=0.25)
 
     parser.add_argument(
         '-loi-coordinates', dest='loi_coordinates',
@@ -246,7 +247,7 @@ if __name__ == '__main__':
             print('no video frame')
             break
         frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-        results = pred.inference(frame, conf=0.25, end2end=False)
+        results = pred.inference(frame, conf=args.det_thr, end2end=False)
 
         results = np.asarray(results)
         results[:, 2:4] += results[:, 0:2] #convert to [x1,y1,w,h] to [x1,y1,x2,y2]
@@ -257,5 +258,5 @@ if __name__ == '__main__':
 
         if c == 10:
             break
-        #out.write(frame)
+        out.write(frame)
     out.release()

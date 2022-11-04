@@ -124,7 +124,7 @@ class RunClass():
         return cv2.cvtColor(frame, cv2.COLOR_RGB2BGR)
 
 
-def get_region_of_interest(width, height, roi_name, roi_coordinates, roi_area, roi_length, loi_coordinates):
+def get_region_of_interest(width, height, roi_coordinates, roi_area, roi_length, loi_coordinates):
     try:
         coordinates = []
         loi = []
@@ -234,7 +234,7 @@ if __name__ == '__main__':
 
 
     fourcc = cv2.VideoWriter_fourcc(*'mp4v')
-    out = cv2.VideoWriter('result.mp4', fourcc, fps, (int(w), int(h)), True)
+    out = cv2.VideoWriter('result.mp4', fourcc, fps, (int(width), int(height)), True)
 
     print(time.time())
     c = 0

@@ -1,12 +1,12 @@
 name: "traffic-state"
 description: "Traffic State Estimator"
-version : "0.0.5"
+version : "0.1.0"
 namespace: "sage"
 authors: "Seongha Park <seongha.park@anl.gov>"
 funding: "NSF 1935984"
-collaborators: "Bhupendra Raut, Dario Dematties Reyes, Joseph Swantek, Neal Conrad, Nicola Ferrier, Pete Beckman, Raj Sankaran, Robert Jackson, Scott Collis, Sean Shahkarami, Sergey Shemyakin, Wolfgang Gerlach, Yongho kim"
+collaborators: "Waggle Team <https://wa8.gl>"
 license: "MIT License"
-keywords: "traffic state, traffic flow, traffic occupancy, traffic speed, machine learning, Multiple Object Tracking (MOT), YOLO v4, DeepSORT"
+keywords: "traffic state, traffic flow, traffic occupancy, traffic speed, machine learning, Multiple Object Tracking (MOT), YOLO v7, SORT"
 homepage: "https://github.com/waggle-sensor/plugin-trafficstate/blob/main/ecr-meta/ecr-science-description.md"
 source:
   architectures :
@@ -37,3 +37,5 @@ inputs:
     type: "boolean"
   - id: "resampling_fps"
     type: "float"
+metadata:
+  ontology: traffic.state.*

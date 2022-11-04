@@ -112,7 +112,7 @@ class RunClass():
             r = track[2]-track[0]  ## x2
             b = track[3]-track[1]  ## y2
 
-            name = self.class_names[track.outclass]
+            name = self.class_names[int(track[-1])]
             frame = cv2.putText(frame, f'{id_num}:{name}', (int(l), int(t)-10), cv2.FONT_HERSHEY_SIMPLEX, 0.9, (0,255,0), 2)
 
             if self.calculate_flow(t, b, r, l, id_num):
@@ -199,5 +199,7 @@ if __name__ == '__main__':
         trackers = mot_tracker.update(dets)
 
         new_frame = r_class.run(trackers, frame)
+    '''
         out.write(frame)
     out.release()
+    '''

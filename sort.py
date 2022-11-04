@@ -15,7 +15,6 @@
 from __future__ import print_function
 
 import numpy as np
-from skimage import io
 
 from filterpy.kalman import KalmanFilter
 

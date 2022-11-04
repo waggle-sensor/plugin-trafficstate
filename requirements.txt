@@ -1,3 +1,2 @@
 ffmpeg-python
-scikit-image
 pywaggle[all]==0.55.*

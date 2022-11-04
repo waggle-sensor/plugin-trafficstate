@@ -1,6 +1,6 @@
 name: "traffic-state"
 description: "Traffic State Estimator"
-version : "0.0.1"
+version : "0.0.5"
 namespace: "sage"
 authors: "Seongha Park <seongha.park@anl.gov>"
 funding: "NSF 1935984"

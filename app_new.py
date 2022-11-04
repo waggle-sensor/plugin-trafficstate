@@ -103,7 +103,6 @@ class RunClass():
 
     def run(self, trackers, frame):
         for track in trackers:
-            print(track)
             id_num = track[4] #Get the ID for the particular track.
             l = track[0]  ## x1
             t = track[1]  ## y1
@@ -255,7 +254,8 @@ if __name__ == '__main__':
         trackers = mot_tracker.update(dets)
 
         new_frame = r_class.run(trackers, frame)
-    '''
-        out.write(frame)
+
+        if c == 10:
+            break
+        #out.write(frame)
     out.release()
-    '''

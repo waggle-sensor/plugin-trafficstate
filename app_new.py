@@ -154,18 +154,39 @@ def parse_args():
     #parser.add_argument("--phase", help="Subdirectory in seq_path.", type=str, default='train')
     parser.add_argument("--max_age",
                         help="Maximum number of frames to keep alive a track without associated detections.",
-                        type=int, default=1)
+                        type=int, default=30)
     parser.add_argument("--min_hits",
                         help="Minimum number of associated detections before track is initialised.",
                         type=int, default=3)
-    parser.add_argument("--iou_threshold", help="Minimum IOU for match.", type=float, default=0.3)
+    parser.add_argument("--iou_threshold", help="Minimum IOU for match.", type=float, default=0.1)
 
     # Data
     parser.add_argument("--input-video", type=str, required=True, help="path to dataset")
     parser.add_argument('--labels', dest='labels',
                         action='store', default='coco.names', type=str,
                         help='Labels for detection')
-    parser.add_argument('--conf-thresh', type=float, default=0.4)
+
+    parser.add_argument(
+        '-loi-coordinates', dest='loi_coordinates',
+        action='store', type=str, default="0.3,0.3 0.6,0.3",
+        help='X,Y Coordinates of Line of interest for flow calculation')
+    parser.add_argument(
+        '-roi-area', dest='roi_area',
+        action='store', type=float, default=60.,
+        help='The area of the RoI in m^2')
+    parser.add_argument(
+        '-roi-length', dest='roi_length',
+        action='store', type=float, default=30.,
+        help='The length of the RoI in m')
+    parser.add_argument(
+        '-roi-coordinates', dest='roi_coordinates',
+        action='store', type=str, default="0.3,0.3 0.6,0.3 0.6,0.6 0.3,0.6",
+        help="""
+X,Y Coordinates of RoI in relative values of (0. - 1.)
+WARNING: the coordinates must be in the order which adjacent points are connected 
+         and the coordinates make a completely closed region
+""")
+
     return parser.parse_args()
 
 
@@ -200,7 +221,6 @@ if __name__ == '__main__':
     ret, roi = get_region_of_interest(
         width=width,
         height=height,
-        roi_name=args.roi_name,
         roi_coordinates=args.roi_coordinates,
         roi_area=args.roi_area,
         roi_length=args.roi_length,

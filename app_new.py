@@ -1,16 +1,12 @@
 from __future__ import print_function
 
-import os
 import numpy as np
-from skimage import io
 
 import time
 import argparse
-from filterpy.kalman import KalmanFilter
 
 import cv2
 
-from utils_trt.utils import preproc, vis
 from utils_trt.utils import BaseEngine
 
 from sort import *
@@ -195,21 +191,5 @@ if __name__ == '__main__':
         trackers = mot_tracker.update(dets)
 
         new_frame = r_class.run(trackers, frame)
-
-        print(time.time())
-
-        for d in trackers:
-            id_num = d[4] #Get the ID for the particular track.
-            l = d[0]  ## x1
-            t = d[1]  ## y1
-            r = d[2]-d[0]  ## x2
-            b = d[3]-d[1]  ## y2
-
-            #name = outclass[track.outclass]
-            name = 'car'
-            frame = cv2.rectangle(frame, (int(l), int(t)), (int(r), int(b)), (255,0,0), 2)
-            frame = cv2.putText(frame, f'{id_num}:{name}', (int(l), int(t)-10), cv2.FONT_HERSHEY_SIMPLEX, 0.9, (0,255,0), 2)
-
-        frame = cv2.cvtColor(frame, cv2.COLOR_RGB2BGR)
         out.write(frame)
     out.release()

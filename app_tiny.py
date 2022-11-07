@@ -14,6 +14,7 @@ from app_utils import RegionOfInterest
 from sort import *
 
 from waggle.plugin import Plugin
+from waggle.data.vision import Camera
 from waggle.data.vision import resolve_device
 from waggle.data.timestamp import get_timestamp
 
@@ -209,7 +210,7 @@ def take_sample(stream, duration, skip_second, resampling, resampling_fps):
 def run(args):
 
     with Plugin() as plugin:
-        timestamp = time.time_ns()
+        timestamp = int(time.time()*1e9)
         plugin.publish('traffic.state.log', 'Traffic State Estimator: Getting Video', timestamp=timestamp)
         print(f"Getting Video at time: {timestamp}")
 
@@ -225,7 +226,7 @@ def run(args):
             fps = args.resampling_fps
             print(f'Input will be resampled to {args.resampling_fps} FPS')
 
-        timestamp = time.time()
+        timestamp = int(time.time()*1e9)
         plugin.publish('traffic.state.log', 'Traffic State Estimator: Loading Models', timestamp=timestamp)
         print(f"Loading Models at time: {timestamp}")
 
@@ -255,7 +256,7 @@ def run(args):
             print(f'Input video will be sampled every {args.sampling_interval}th inferencing')
             sampling_countdown = args.sampling_interval
 
-        timestamp = time.time()
+        timestamp = int(time.time()*1e9)
         plugin.publish('traffic.state.log', 'Traffic State Estimator: Starting Estimation', timestamp=timestamp)
         print(f"Starting Estimation at time: {timestamp}")
 
@@ -270,6 +271,7 @@ def run(args):
                 resampling=args.resampling,
                 resampling_fps=args.resampling_fps
             )
+            timestamp = int(timestamp)
             if ret == False:
                 print('Coud not sample video. Exiting...')
                 return 1
@@ -300,7 +302,7 @@ def run(args):
 
                 c += 1
                 print(c)
-                
+
                 results = pred.inference(frame, conf=args.det_thr, end2end=False)
 
                 results = np.asarray(results)
@@ -311,16 +313,16 @@ def run(args):
 
                 if do_sampling:
                     coordinates = r_class.roi.get_coordinates()
-                    sample = cv2.polylines(sample, coordinates, 
+                    sample = cv2.polylines(sample, coordinates,
                                 True, (255, 0, 0), 2)
                     coordinates = r_class.roi.get_loi()
-                    sample = cv2.polylines(sample, coordinates, 
+                    sample = cv2.polylines(sample, coordinates,
                                 True, (0, 0, 255), 4)
                     out.write(sample)
                 total_frames += 1
 
                 if total_frames % fps == 0:
-                    elapsed_time = timestamp + int((total_frames / fps)) * 1e9
+                    elapsed_time = timestamp + int((total_frames / fps) * 1e9)
                     ##### traffic occupancy
                     occupancy = r_class.get_occupancy()
                     plugin.publish(
@@ -331,11 +333,11 @@ def run(args):
                     ##### traffic flow
                     flow = r_class.get_flow()
                     plugin.publish(
-                        'traffic.state.flow', 
+                        'traffic.state.flow',
                         flow,
                         timestamp=elapsed_time)
 
-                    print(f'{datetime.fromtimestamp(elapsed_time / 1.e9)} Traffic occupancy: {occupancy} flow: {flow}')
+                    print(f'{datetime.datetime.fromtimestamp(elapsed_time / 1.e9)} Traffic occupancy: {occupancy} flow: {flow}')
                     # Reset the accumulated values
                     r_class.reset_flow_and_occupancy()
 
@@ -345,14 +347,14 @@ def run(args):
                 'traffic.state.averaged_speed',
                 averaged_speed,
                 timestamp=timestamp)
-            print(f'{datetime.fromtimestamp(timestamp / 1.e9)} Traffic speed: {averaged_speed}')
+            print(f'{datetime.datetime.fromtimestamp(timestamp / 1.e9)} Traffic speed: {averaged_speed}')
 
             if do_sampling:
                 out.release()
                 plugin.upload_file("sample.mp4")
             r_class.clean_up()
             print('Tracker is cleaned up for next analysis')
-            
+
 
 
 def parse_args():

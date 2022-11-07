@@ -12,9 +12,9 @@ COPY requirements.txt /app/
 RUN pip3 install --no-cache-dir --upgrade -r /app/requirements.txt
 
 COPY utils_trt/ /app/utils_trt
-COPY app.py app_utils.py sort.py /app/
+COPY app_tiny.py app_utils.py sort.py /app/
 
-ADD https://web.lcrc.anl.gov/public/waggle/models/vehicletracking/yolov7.pt /app/yolov7.pt
+ADD https://web.lcrc.anl.gov/public/waggle/models/vehicletracking/yolov7_tiny.trt /app/model.trt
 
 WORKDIR /app
 ENTRYPOINT ["python3", "-u", "/app/app.py"]

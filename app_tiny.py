@@ -4,11 +4,19 @@ import numpy as np
 import time
 import argparse
 import cv2
+import datetime
+import os
+import ffmpeg
 
 from utils_trt.utils import BaseEngine
 from app_utils import RegionOfInterest
 
 from sort import *
+
+from waggle.plugin import Plugin
+from waggle.data.vision import VideoCapture, resolve_device
+from waggle.data.timestamp import get_timestamp
+
 
 def load_class_names(namesfile):
     class_names = []
@@ -122,6 +130,13 @@ class RunClass():
         return cv2.cvtColor(frame, cv2.COLOR_RGB2BGR)
 
 
+class Predictor(BaseEngine):
+    def __init__(self, engine_path , imgsz=(640,640)):
+        super(Predictor, self).__init__(engine_path)
+        self.imgsz = imgsz # your model infer image size
+        self.n_classes = 80  # your model classes
+
+
 def get_region_of_interest(width, height, roi_coordinates, roi_area, roi_length, loi_coordinates):
     try:
         coordinates = []
@@ -142,6 +157,203 @@ def get_region_of_interest(width, height, roi_coordinates, roi_area, roi_length,
         return True, roi
     except Exception as ex:
         return False, str(ex)
+
+def get_stream_info(stream_url):
+    try:
+        input_probe = ffmpeg.probe(stream_url)
+        fps = eval(input_probe['streams'][0]['r_frame_rate'])
+        width = int(input_probe['streams'][0]['width'])
+        height = int(input_probe['streams'][0]['height'])
+        return True, fps, width, height
+    except:
+        return False, 0., 0, 0
+
+
+"""
+    ffmpeg describes that 
+    https://trac.ffmpeg.org/wiki/ChangingFrameRate
+"""
+def take_sample(stream, duration, skip_second, resampling, resampling_fps):
+    stream_url = resolve_device(stream)
+    # Assume PyWaggle's timestamp is in nano seconds
+    timestamp = get_timestamp() + skip_second * 1e9
+    try:
+        script_dir = os.path.dirname(__file__)
+    except NameError:
+        script_dir = os.getcwd()
+    filename_raw = os.path.join(script_dir, 'record_raw.mp4')
+    filename = os.path.join(script_dir, 'record.mp4')
+
+    c = ffmpeg.input(stream_url, ss=skip_second).output(
+        filename_raw,
+        codec = "copy", # use same codecs of the original video
+        f='mp4',
+        t=duration).overwrite_output()
+    print(c.compile())
+    c.run(quiet=True)
+
+    d = ffmpeg.input(filename_raw)
+    if resampling:
+        print(f'Resampling to {resampling_fps}...')
+        d = ffmpeg.filter(d, 'fps', fps=resampling_fps)
+        d = ffmpeg.output(d, filename, f='mp4', t=duration).overwrite_output()
+    else:
+        d = ffmpeg.output(d, filename, codec="copy", f='mp4', t=duration).overwrite_output()
+
+    print(d.compile())
+    d.run(quiet=True)
+    # TODO: We may want to inspect whether the ffmpeg commands succeeded
+    return True, filename, timestamp
+
+
+def run(args):
+
+    with Plugin() as plugin:
+        timestamp = time.time()
+        plugin.publish('traffic.state.log', 'Traffic State Estimator: Getting Video', timestamp=timestamp)
+        print(f"Getting Video at time: {timestamp}")
+
+        device_url = resolve_device(args.stream)
+        ret, fps, width, height = get_stream_info(device_url)
+        if ret == False:
+            print(f'Error probing {device_url}. Please make sure to put a correct video stream')
+            return 1
+        print(f'Input stream {device_url} with size of W: {width}, H: {height} at {fps} FPS')
+
+        # If resampling is True, we use resampling_fps for inferencing as well as sampling
+        if args.resampling:
+            fps = args.resampling_fps
+            print(f'Input will be resampled to {args.resampling_fps} FPS')
+
+        timestamp = time.time()
+        plugin.publish('traffic.state.log', 'Traffic State Estimator: Loading Models', timestamp=timestamp)
+        print(f"Loading Models at time: {timestamp}")
+
+        pred = Predictor(engine_path=args.engine)
+        mot_tracker = Sort(max_age=args.max_age,
+                        min_hits=args.min_hits,
+                        iou_threshold=args.iou_threshold) #create instance of the SORT tracker
+        r_class = RunClass(fps, args.labels)
+
+        print('Configuring target area...')
+        ret, roi = get_region_of_interest(
+            width=width,
+            height=height,
+            roi_coordinates=args.roi_coordinates,
+            roi_area=args.roi_area,
+            roi_length=args.roi_length,
+            loi_coordinates=args.loi_coordinates
+        )
+        if ret == False:
+            print(f'Could not configure region of interest: {roi}. Exiting...')
+            exit(1)
+        r_class.set_roi(roi)
+        print(f'Boundary of the ROI: {roi.roi.bounds}')
+
+        sampling_countdown = -1
+        if args.sampling_interval > -1:
+            print(f'Input video will be sampled every {args.sampling_interval}th inferencing')
+            sampling_countdown = args.sampling_interval
+
+        timestamp = time.time()
+        plugin.publish('traffic.state.log', 'Traffic State Estimator: Starting Estimation', timestamp=timestamp)
+        print(f"Starting Estimation at time: {timestamp}")
+
+        print('Starting traffic state estimation..')
+
+        while True:
+            print(f'Grabbing video for {args.duration} seconds')
+            ret, filename, timestamp = take_sample(
+                stream=args.stream,
+                duration=args.duration,
+                skip_second=args.skip_second,
+                resampling=args.resampling,
+                resampling_fps=args.resampling_fps
+            )
+            if ret == False:
+                print('Coud not sample video. Exiting...')
+                return 1
+
+            print('Analyzing the video...')
+            total_frames = 0
+            do_sampling = False
+            if sampling_countdown > 0:
+                sampling_countdown -= 1
+            elif sampling_countdown == 0:
+                do_sampling = True
+                sampling_countdown = args.sampling_interval
+
+
+            with VideoCapture(filename) as cap:
+                width  = cap.get(cv2.CAP_PROP_FRAME_WIDTH)  # float
+                height = cap.get(cv2.CAP_PROP_FRAME_HEIGHT) # float
+
+                if do_sampling:
+                    fourcc = cv2.VideoWriter_fourcc(*'mp4v')
+                    out = cv2.VideoWriter("sample.mp4", fourcc, fps, (int(width), int(height)), True)
+
+                c = 0
+                while True:
+                    ret, frame = cap.read()
+                    if ret == False:
+                        print('no video frame')
+                        break
+
+                    c += 1
+                    print(c)
+                    
+                    results = pred.inference(frame, conf=args.det_thr, end2end=False)
+
+                    results = np.asarray(results)
+                    results[:, 2:4] += results[:, 0:2] #convert to [x1,y1,w,h] to [x1,y1,x2,y2]
+                    dets = results
+                    trackers = mot_tracker.update(dets)
+                    sample = r_class.run(trackers, frame)
+
+                    if do_sampling:
+                        coordinates = r_class.roi.get_coordinates()
+                        sample = cv2.polylines(sample, coordinates, 
+                        True, (255, 0, 0), 2)
+                        coordinates = r_class.roi.get_loi()
+                        sample = cv2.polylines(sample, coordinates, 
+                        True, (0, 0, 255), 4)
+                        out.write(sample)
+                    total_frames += 1
+
+                    if total_frames % fps == 0:
+                        elapsed_time = timestamp + int((total_frames / fps)) * 1e9
+                        ##### traffic occupancy
+                        occupancy = r_class.get_occupancy()
+                        plugin.publish(
+                            'traffic.state.occupancy',
+                            occupancy,
+                            timestamp=elapsed_time)
+
+                        ##### traffic flow
+                        flow = r_class.get_flow()
+                        plugin.publish(
+                            'traffic.state.flow', 
+                            flow,
+                            timestamp=elapsed_time)
+
+                        print(f'{datetime.fromtimestamp(elapsed_time / 1.e9)} Traffic occupancy: {occupancy} flow: {flow}')
+                        # Reset the accumulated values
+                        r_class.reset_flow_and_occupancy()
+
+                ##### traffic speed
+                averaged_speed = r_class.get_averaged_speed()
+                plugin.publish(
+                    'traffic.state.averaged_speed',
+                    averaged_speed,
+                    timestamp=timestamp)
+                print(f'{datetime.fromtimestamp(timestamp / 1.e9)} Traffic speed: {averaged_speed}')
+            if do_sampling:
+                out.release()
+                plugin.upload_file("sample.mp4")
+            r_class.clean_up()
+            print('Tracker is cleaned up for next analysis')
+            
+
 
 def parse_args():
     """Parse input arguments."""
@@ -164,6 +376,32 @@ def parse_args():
                         action='store', default='coco.names', type=str,
                         help='Labels for detection')
     parser.add_argument("--detection-threshold", dest='det_thr', type=float, default=0.25)
+
+
+    parser.add_argument(
+        '-stream', dest='stream',
+        action='store', default="camera", type=str,
+        help='ID or name of a stream, e.g. sample')
+    parser.add_argument(
+        '-duration', dest='duration',
+        action='store', default=10., type=float,
+        help='Time duration for input video')
+    parser.add_argument(
+        '-resampling', dest='resampling', default=False,
+        action='store_true', help="Resampling the sample to -resample-fps option (defualt 12)")
+    parser.add_argument(
+        '-resampling-fps', dest='resampling_fps',
+        action='store', default=12, type=int,
+        help='Frames per second for input video')
+    parser.add_argument(
+        '-skip-second', dest='skip_second',
+        action='store', default=3., type=float,
+        help='Seconds to skip before recording')
+    parser.add_argument(
+        '-sampling-interval', dest='sampling_interval',
+        action='store', default=-1, type=int,
+        help='Inferencing interval for sampling results')
+
 
     parser.add_argument(
         '-loi-coordinates', dest='loi_coordinates',
@@ -189,74 +427,9 @@ WARNING: the coordinates must be in the order which adjacent points are connecte
     return parser.parse_args()
 
 
-class Predictor(BaseEngine):
-    def __init__(self, engine_path , imgsz=(640,640)):
-        super(Predictor, self).__init__(engine_path)
-        self.imgsz = imgsz # your model infer image size
-        self.n_classes = 80  # your model classes
-
 if __name__ == '__main__':
 
     print(time.time())
     args = parse_args()
 
-    cap = cv2.VideoCapture(args.input_video)
-    fps = int(cap.get(cv2.CAP_PROP_FPS))
-    ret, frame = cap.read()
-    height, width, c = frame.shape
-
-    pred = Predictor(engine_path=args.engine)
-
-    out_file = open('stats.txt', 'a', buffering=1)
-    display = args.display
-    total_time = 0.0
-    total_frames = 0
-    mot_tracker = Sort(max_age=args.max_age,
-                       min_hits=args.min_hits,
-                       iou_threshold=args.iou_threshold) #create instance of the SORT tracker
-    r_class = RunClass(fps, args.labels)
-
-    print('Configuring target area...')
-    ret, roi = get_region_of_interest(
-        width=width,
-        height=height,
-        roi_coordinates=args.roi_coordinates,
-        roi_area=args.roi_area,
-        roi_length=args.roi_length,
-        loi_coordinates=args.loi_coordinates
-    )
-    if ret == False:
-        print(f'Could not configure region of interest: {roi}. Exiting...')
-        exit(1)
-    r_class.set_roi(roi)
-    print(f'Boundary of the ROI: {roi.roi.bounds}')
-
-
-    fourcc = cv2.VideoWriter_fourcc(*'mp4v')
-    out = cv2.VideoWriter('result.mp4', fourcc, fps, (int(width), int(height)), True)
-
-    print(time.time())
-    c = 0
-    while True:
-        c += 1
-        print(c)
-        print('s', time.time())
-
-        ret, frame = cap.read()
-        if ret == False:
-            print('no video frame')
-            break
-        frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-        results = pred.inference(frame, conf=args.det_thr, end2end=False)
-
-        results = np.asarray(results)
-        results[:, 2:4] += results[:, 0:2] #convert to [x1,y1,w,h] to [x1,y1,x2,y2]
-        dets = results
-        trackers = mot_tracker.update(dets)
-
-        new_frame = r_class.run(trackers, frame)
-
-        if c == 10:
-            break
-        out.write(new_frame)
-    out.release()
+    run(args)

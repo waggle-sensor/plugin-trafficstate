@@ -1,6 +1,6 @@
 # Traffic state estimator
 
-The plugin calculates traffic flow, occupancy and average speed. It uses the results from vehicle tracking, and it adopts the concept of tracking-by-detection for object tracking. It utilized YOLOv7 or YOLOv7 tiny to detect vehicles, and utilized SORT method to track vehicles. The plugin requires Nvidia GPU for inferencing. To calculate traffic state on the region where interested in (for example, 4 right lanes where the vehicles are comming in) region of interest must be provided to the plugin. ROI need to be provided as the points of the corner of the ploygon shaped the ROI. The points are the points in ratios of the image (If one point is the center of the image, then the point need to be written as 0.5,0.5).
+The plugin calculates traffic flow, occupancy and average speed. It uses the results from vehicle tracking, and it adopts the concept of tracking-by-detection for object tracking. It utilized YOLOv7 tiny to detect vehicles, and utilized SORT method to track vehicles. The plugin requires Nvidia GPU for inferencing. To calculate traffic state on the region where interested in (for example, 4 right lanes where the vehicles are comming in) region of interest must be provided to the plugin. ROI need to be provided as the points of the corner of the ploygon shaped the ROI. The points are the points in ratios of the image (If one point is the center of the image, then the point need to be written as 0.5,0.5).
 
 ## How to use
 

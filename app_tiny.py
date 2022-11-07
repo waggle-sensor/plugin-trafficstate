@@ -262,98 +262,97 @@ def run(args):
 
         print('Starting traffic state estimation..')
 
+        print(f'Grabbing video for {args.duration} seconds')
+        ret, filename, timestamp = take_sample(
+            stream=args.stream,
+            duration=args.duration,
+            skip_second=args.skip_second,
+            resampling=args.resampling,
+            resampling_fps=args.resampling_fps
+        )
+        timestamp = int(timestamp)
+        if ret == False:
+            print('Coud not sample video. Exiting...')
+            return 1
+
+        print('Analyzing the video...')
+        total_frames = 0
+        do_sampling = False
+        if sampling_countdown > 0:
+            sampling_countdown -= 1
+        elif sampling_countdown == 0:
+            do_sampling = True
+            sampling_countdown = args.sampling_interval
+
+        cap = cv2.VideoCapture(filename)
+        width  = cap.get(cv2.CAP_PROP_FRAME_WIDTH)  # float
+        height = cap.get(cv2.CAP_PROP_FRAME_HEIGHT) # float
+
+        if do_sampling:
+            fourcc = cv2.VideoWriter_fourcc(*'mp4v')
+            out = cv2.VideoWriter("sample.mp4", fourcc, fps, (int(width), int(height)), True)
+
+        c = 0
         while True:
-            print(f'Grabbing video for {args.duration} seconds')
-            ret, filename, timestamp = take_sample(
-                stream=args.stream,
-                duration=args.duration,
-                skip_second=args.skip_second,
-                resampling=args.resampling,
-                resampling_fps=args.resampling_fps
-            )
-            timestamp = int(timestamp)
+            ret, frame = cap.read()
             if ret == False:
-                print('Coud not sample video. Exiting...')
-                return 1
+                print('no video frame')
+                break
 
-            print('Analyzing the video...')
-            total_frames = 0
-            do_sampling = False
-            if sampling_countdown > 0:
-                sampling_countdown -= 1
-            elif sampling_countdown == 0:
-                do_sampling = True
-                sampling_countdown = args.sampling_interval
+            c += 1
+            print(c)
 
-            cap = cv2.VideoCapture(filename)
-            width  = cap.get(cv2.CAP_PROP_FRAME_WIDTH)  # float
-            height = cap.get(cv2.CAP_PROP_FRAME_HEIGHT) # float
+            results = pred.inference(frame, conf=args.det_thr, end2end=False)
+
+            results = np.asarray(results)
+            results[:, 2:4] += results[:, 0:2] #convert to [x1,y1,w,h] to [x1,y1,x2,y2]
+            dets = results
+            trackers = mot_tracker.update(dets)
+            sample = r_class.run(trackers, frame)
 
             if do_sampling:
-                fourcc = cv2.VideoWriter_fourcc(*'mp4v')
-                out = cv2.VideoWriter("sample.mp4", fourcc, fps, (int(width), int(height)), True)
+                coordinates = r_class.roi.get_coordinates()
+                sample = cv2.polylines(sample, coordinates,
+                            True, (255, 0, 0), 2)
+                coordinates = r_class.roi.get_loi()
+                sample = cv2.polylines(sample, coordinates,
+                            True, (0, 0, 255), 4)
+                out.write(sample)
+            total_frames += 1
 
-            c = 0
-            while True:
-                ret, frame = cap.read()
-                if ret == False:
-                    print('no video frame')
-                    break
+            if total_frames % fps == 0:
+                elapsed_time = timestamp + int((total_frames / fps) * 1e9)
+                ##### traffic occupancy
+                occupancy = r_class.get_occupancy()
+                plugin.publish(
+                    'traffic.state.occupancy',
+                    occupancy,
+                    timestamp=elapsed_time)
 
-                c += 1
-                print(c)
+                ##### traffic flow
+                flow = r_class.get_flow()
+                plugin.publish(
+                    'traffic.state.flow',
+                    flow,
+                    timestamp=elapsed_time)
 
-                results = pred.inference(frame, conf=args.det_thr, end2end=False)
+                print(f'{datetime.datetime.fromtimestamp(elapsed_time / 1.e9)} Traffic occupancy: {occupancy} flow: {flow}')
+                # Reset the accumulated values
+                r_class.reset_flow_and_occupancy()
 
-                results = np.asarray(results)
-                results[:, 2:4] += results[:, 0:2] #convert to [x1,y1,w,h] to [x1,y1,x2,y2]
-                dets = results
-                trackers = mot_tracker.update(dets)
-                sample = r_class.run(trackers, frame)
+        ##### traffic speed
+        averaged_speed = r_class.get_averaged_speed()
+        plugin.publish(
+            'traffic.state.averaged_speed',
+            averaged_speed,
+            timestamp=timestamp)
+        print(f'{datetime.datetime.fromtimestamp(timestamp / 1.e9)} Traffic speed: {averaged_speed}')
 
-                if do_sampling:
-                    coordinates = r_class.roi.get_coordinates()
-                    sample = cv2.polylines(sample, coordinates,
-                                True, (255, 0, 0), 2)
-                    coordinates = r_class.roi.get_loi()
-                    sample = cv2.polylines(sample, coordinates,
-                                True, (0, 0, 255), 4)
-                    out.write(sample)
-                total_frames += 1
-
-                if total_frames % fps == 0:
-                    elapsed_time = timestamp + int((total_frames / fps) * 1e9)
-                    ##### traffic occupancy
-                    occupancy = r_class.get_occupancy()
-                    plugin.publish(
-                        'traffic.state.occupancy',
-                        occupancy,
-                        timestamp=elapsed_time)
-
-                    ##### traffic flow
-                    flow = r_class.get_flow()
-                    plugin.publish(
-                        'traffic.state.flow',
-                        flow,
-                        timestamp=elapsed_time)
-
-                    print(f'{datetime.datetime.fromtimestamp(elapsed_time / 1.e9)} Traffic occupancy: {occupancy} flow: {flow}')
-                    # Reset the accumulated values
-                    r_class.reset_flow_and_occupancy()
-
-            ##### traffic speed
-            averaged_speed = r_class.get_averaged_speed()
-            plugin.publish(
-                'traffic.state.averaged_speed',
-                averaged_speed,
-                timestamp=timestamp)
-            print(f'{datetime.datetime.fromtimestamp(timestamp / 1.e9)} Traffic speed: {averaged_speed}')
-
-            if do_sampling:
-                out.release()
-                plugin.upload_file("sample.mp4")
-            r_class.clean_up()
-            print('Tracker is cleaned up for next analysis')
+        if do_sampling:
+            out.release()
+            plugin.upload_file("sample.mp4")
+        r_class.clean_up()
+        print('Tracker is cleaned up for next analysis')
 
 
 

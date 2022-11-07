@@ -209,7 +209,7 @@ def take_sample(stream, duration, skip_second, resampling, resampling_fps):
 def run(args):
 
     with Plugin() as plugin:
-        timestamp = time.time()
+        timestamp = time.time_ns()
         plugin.publish('traffic.state.log', 'Traffic State Estimator: Getting Video', timestamp=timestamp)
         print(f"Getting Video at time: {timestamp}")
 
@@ -358,21 +358,20 @@ def run(args):
 def parse_args():
     """Parse input arguments."""
     parser = argparse.ArgumentParser(description='SORT demo')
-    parser.add_argument('--engine', type=str, required=True)
-    parser.add_argument("--max_age",
+    parser.add_argument('-engine', type=str, required=True)
+    parser.add_argument("-max_age",
                         help="Maximum number of frames to keep alive a track without associated detections.",
                         type=int, default=30)
-    parser.add_argument("--min_hits",
+    parser.add_argument("-min_hits",
                         help="Minimum number of associated detections before track is initialised.",
                         type=int, default=3)
-    parser.add_argument("--iou_threshold", help="Minimum IOU for match.", type=float, default=0.1)
+    parser.add_argument("-iou_threshold", help="Minimum IOU for match.", type=float, default=0.1)
 
     # Data
-    parser.add_argument("--input-video", type=str, required=True, help="path to dataset")
-    parser.add_argument('--labels', dest='labels',
+    parser.add_argument('-labels', dest='labels',
                         action='store', default='coco.names', type=str,
                         help='Labels for detection')
-    parser.add_argument("--detection-threshold", dest='det_thr', type=float, default=0.25)
+    parser.add_argument("-detection-threshold", dest='det_thr', type=float, default=0.25)
 
 
     parser.add_argument(

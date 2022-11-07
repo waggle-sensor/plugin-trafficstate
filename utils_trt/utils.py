@@ -62,12 +62,12 @@ class BaseEngine(object):
             dets = np.concatenate([final_boxes[:num[0]], np.array(final_scores)[:num[0]].reshape(-1, 1), np.array(final_cls_inds)[:num[0]].reshape(-1, 1)], axis=-1)
         else:
             predictions = np.reshape(data, (1, -1, int(5+self.n_classes)))[0]
-            dets = self.postprocess(predictions,ratio)
+            dets = self.postprocess(predictions,ratio, conf)
 
         return dets
 
     @staticmethod
-    def postprocess(predictions, ratio):
+    def postprocess(predictions, ratio, conf):
         boxes = predictions[:, :4]
         scores = predictions[:, 4:5] * predictions[:, 5:]
         boxes_xyxy = np.ones_like(boxes)
@@ -76,7 +76,7 @@ class BaseEngine(object):
         boxes_xyxy[:, 2] = boxes[:, 0] + boxes[:, 2] / 2.
         boxes_xyxy[:, 3] = boxes[:, 1] + boxes[:, 3] / 2.
         boxes_xyxy /= ratio
-        dets = multiclass_nms(boxes_xyxy, scores, nms_thr=0.45, score_thr=0.1)
+        dets = multiclass_nms(boxes_xyxy, scores, nms_thr=0.45, score_thr=conf)
         return dets
 
 def nms(boxes, scores, nms_thr):

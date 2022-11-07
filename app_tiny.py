@@ -258,5 +258,5 @@ if __name__ == '__main__':
 
         if c == 10:
             break
-        out.write(frame)
+        out.write(new_frame)
     out.release()

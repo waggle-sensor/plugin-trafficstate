@@ -284,6 +284,8 @@ def run(args):
             do_sampling = True
             sampling_countdown = args.sampling_interval
 
+        print('do sampling', do_sampling)
+
         cap = cv2.VideoCapture(filename)
         width  = cap.get(cv2.CAP_PROP_FRAME_WIDTH)  # float
         height = cap.get(cv2.CAP_PROP_FRAME_HEIGHT) # float

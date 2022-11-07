@@ -14,7 +14,7 @@ from app_utils import RegionOfInterest
 from sort import *
 
 from waggle.plugin import Plugin
-from waggle.data.vision import VideoCapture, resolve_device
+from waggle.data.vision import resolve_device
 from waggle.data.timestamp import get_timestamp
 
 
@@ -283,70 +283,70 @@ def run(args):
                 do_sampling = True
                 sampling_countdown = args.sampling_interval
 
+            cap = cv2.VideoCapture(filename)
+            width  = cap.get(cv2.CAP_PROP_FRAME_WIDTH)  # float
+            height = cap.get(cv2.CAP_PROP_FRAME_HEIGHT) # float
 
-            with VideoCapture(filename) as cap:
-                width  = cap.get(cv2.CAP_PROP_FRAME_WIDTH)  # float
-                height = cap.get(cv2.CAP_PROP_FRAME_HEIGHT) # float
+            if do_sampling:
+                fourcc = cv2.VideoWriter_fourcc(*'mp4v')
+                out = cv2.VideoWriter("sample.mp4", fourcc, fps, (int(width), int(height)), True)
+
+            c = 0
+            while True:
+                ret, frame = cap.read()
+                if ret == False:
+                    print('no video frame')
+                    break
+
+                c += 1
+                print(c)
+                
+                results = pred.inference(frame, conf=args.det_thr, end2end=False)
+
+                results = np.asarray(results)
+                results[:, 2:4] += results[:, 0:2] #convert to [x1,y1,w,h] to [x1,y1,x2,y2]
+                dets = results
+                trackers = mot_tracker.update(dets)
+                sample = r_class.run(trackers, frame)
 
                 if do_sampling:
-                    fourcc = cv2.VideoWriter_fourcc(*'mp4v')
-                    out = cv2.VideoWriter("sample.mp4", fourcc, fps, (int(width), int(height)), True)
+                    coordinates = r_class.roi.get_coordinates()
+                    sample = cv2.polylines(sample, coordinates, 
+                                True, (255, 0, 0), 2)
+                    coordinates = r_class.roi.get_loi()
+                    sample = cv2.polylines(sample, coordinates, 
+                                True, (0, 0, 255), 4)
+                    out.write(sample)
+                total_frames += 1
 
-                c = 0
-                while True:
-                    ret, frame = cap.read()
-                    if ret == False:
-                        print('no video frame')
-                        break
+                if total_frames % fps == 0:
+                    elapsed_time = timestamp + int((total_frames / fps)) * 1e9
+                    ##### traffic occupancy
+                    occupancy = r_class.get_occupancy()
+                    plugin.publish(
+                        'traffic.state.occupancy',
+                        occupancy,
+                        timestamp=elapsed_time)
 
-                    c += 1
-                    print(c)
-                    
-                    results = pred.inference(frame, conf=args.det_thr, end2end=False)
+                    ##### traffic flow
+                    flow = r_class.get_flow()
+                    plugin.publish(
+                        'traffic.state.flow', 
+                        flow,
+                        timestamp=elapsed_time)
 
-                    results = np.asarray(results)
-                    results[:, 2:4] += results[:, 0:2] #convert to [x1,y1,w,h] to [x1,y1,x2,y2]
-                    dets = results
-                    trackers = mot_tracker.update(dets)
-                    sample = r_class.run(trackers, frame)
+                    print(f'{datetime.fromtimestamp(elapsed_time / 1.e9)} Traffic occupancy: {occupancy} flow: {flow}')
+                    # Reset the accumulated values
+                    r_class.reset_flow_and_occupancy()
 
-                    if do_sampling:
-                        coordinates = r_class.roi.get_coordinates()
-                        sample = cv2.polylines(sample, coordinates, 
-                        True, (255, 0, 0), 2)
-                        coordinates = r_class.roi.get_loi()
-                        sample = cv2.polylines(sample, coordinates, 
-                        True, (0, 0, 255), 4)
-                        out.write(sample)
-                    total_frames += 1
+            ##### traffic speed
+            averaged_speed = r_class.get_averaged_speed()
+            plugin.publish(
+                'traffic.state.averaged_speed',
+                averaged_speed,
+                timestamp=timestamp)
+            print(f'{datetime.fromtimestamp(timestamp / 1.e9)} Traffic speed: {averaged_speed}')
 
-                    if total_frames % fps == 0:
-                        elapsed_time = timestamp + int((total_frames / fps)) * 1e9
-                        ##### traffic occupancy
-                        occupancy = r_class.get_occupancy()
-                        plugin.publish(
-                            'traffic.state.occupancy',
-                            occupancy,
-                            timestamp=elapsed_time)
-
-                        ##### traffic flow
-                        flow = r_class.get_flow()
-                        plugin.publish(
-                            'traffic.state.flow', 
-                            flow,
-                            timestamp=elapsed_time)
-
-                        print(f'{datetime.fromtimestamp(elapsed_time / 1.e9)} Traffic occupancy: {occupancy} flow: {flow}')
-                        # Reset the accumulated values
-                        r_class.reset_flow_and_occupancy()
-
-                ##### traffic speed
-                averaged_speed = r_class.get_averaged_speed()
-                plugin.publish(
-                    'traffic.state.averaged_speed',
-                    averaged_speed,
-                    timestamp=timestamp)
-                print(f'{datetime.fromtimestamp(timestamp / 1.e9)} Traffic speed: {averaged_speed}')
             if do_sampling:
                 out.release()
                 plugin.upload_file("sample.mp4")
@@ -359,9 +359,6 @@ def parse_args():
     """Parse input arguments."""
     parser = argparse.ArgumentParser(description='SORT demo')
     parser.add_argument('--engine', type=str, required=True)
-    parser.add_argument('--display', dest='display', help='Display online tracker output (slow) [False]',action='store_true')
-    #parser.add_argument("--seq_path", help="Path to detections.", required=True, type=str, default='data')
-    #parser.add_argument("--phase", help="Subdirectory in seq_path.", type=str, default='train')
     parser.add_argument("--max_age",
                         help="Maximum number of frames to keep alive a track without associated detections.",
                         type=int, default=30)

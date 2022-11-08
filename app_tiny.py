@@ -99,7 +99,7 @@ class RunClass():
             if counted_frames < 0:
                 delta_t = -1 * counted_frames / self.fps
                 delta_d = self.roi.road_length
-                sum_speed += delta_d / delta_t * 3.6 # m/s to km/h
+                sum_speed += delta_d / delta_t ### * 3.6 # m/s to km/h
         return 0. if len(self.speed.keys()) == 0 else sum_speed / len(self.speed.keys())
 
     def reset_flow_and_occupancy(self):
@@ -307,10 +307,13 @@ def run(args):
             results = pred.inference(frame, conf=args.det_thr, end2end=False)
 
             results = np.asarray(results)
-            results[:, 2:4] += results[:, 0:2] #convert to [x1,y1,w,h] to [x1,y1,x2,y2]
-            dets = results
-            trackers = mot_tracker.update(dets)
-            sample = r_class.run(trackers, frame)
+            if results != []:
+                results[:, 2:4] += results[:, 0:2] #convert to [x1,y1,w,h] to [x1,y1,x2,y2]
+                dets = results
+                trackers = mot_tracker.update(dets)
+                sample = r_class.run(trackers, frame)
+            else:
+                sample = frame
 
             if do_sampling:
                 coordinates = r_class.roi.get_coordinates()

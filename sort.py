@@ -84,7 +84,8 @@ class KalmanBoxTracker(object):
   This class represents the internal state of individual tracked objects observed as bbox.
   """
   count = 0
-  def __init__(self, bbox, R_diag=0.15, Q_pos=0.106123, Q_vel=0.016327):
+#   def __init__(self, bbox, R_diag=0.15, Q_pos=0.106123, Q_vel=0.016327):
+  def __init__(self, bbox, R_diag=0.15, Q_pos=0.0106123, Q_vel=0.016327):
     """
     Initialises a tracker using initial bounding box.
     """

@@ -8,7 +8,14 @@ import datetime
 import os
 import ffmpeg
 
-from utils_trt.utils import BaseEngine
+import torch
+import torch.nn as nn
+
+
+from models.experimental import Ensemble
+from models.common import Conv, DWConv
+from utils.general import non_max_suppression, apply_classifier
+
 from app_utils import RegionOfInterest
 
 from sort import *
@@ -131,11 +138,48 @@ class RunClass():
         return cv2.cvtColor(frame, cv2.COLOR_RGB2BGR)
 
 
-class Predictor(BaseEngine):
-    def __init__(self, engine_path , imgsz=(640,640)):
-        super(Predictor, self).__init__(engine_path)
-        self.imgsz = imgsz # your model infer image size
-        self.n_classes = 80  # your model classes
+class YOLOv7_Main():
+    def __init__(self, args, weightfile):
+        self.use_cuda = torch.cuda.is_available()
+        if self.use_cuda:
+            self.device = 'cuda'
+        else:
+            self.device = 'cpu'
+
+        self.model = Ensemble()
+        ckpt = torch.load(weightfile, map_location=self.device)
+        self.model.append(ckpt['ema' if ckpt.get('ema') else 'model'].float().fuse().eval())  # FP32 model
+
+        # Compatibility updates
+        for m in self.model.modules():
+            if type(m) in [nn.Hardswish, nn.LeakyReLU, nn.ReLU, nn.ReLU6, nn.SiLU]:
+                m.inplace = True  # pytorch 1.7.0 compatibility
+            elif type(m) is nn.Upsample:
+                m.recompute_scale_factor = None  # torch 1.11.0 compatibility
+            elif type(m) is Conv:
+                m._non_persistent_buffers_set = set()  # pytorch 1.6.0 compatibility
+
+        self.model = self.model.half()
+        self.model.eval()
+
+        self.class_names = load_class_names(args.labels)
+
+
+    def run(self, frame, args):
+        sized = cv2.resize(frame, (640, 640))
+        sized = cv2.cvtColor(sized, cv2.COLOR_BGR2RGB)
+
+        image = sized / 255.0
+        image = image.transpose((2, 0, 1))
+        image = torch.from_numpy(image).to(self.device).half()
+        image = image.unsqueeze(0)
+
+        with torch.no_grad():
+            pred = self.model(image)[0]
+            pred = non_max_suppression(pred, args.conf_thres, args.iou_thres, classes=args.classes, agnostic=True)
+
+        return pred
+
 
 
 def get_region_of_interest(width, height, roi_coordinates, roi_area, roi_length, loi_coordinates):
@@ -230,7 +274,7 @@ def run(args):
         plugin.publish('traffic.state.log', 'Traffic State Estimator: Loading Models', timestamp=timestamp)
         print(f"Loading Models at time: {timestamp}")
 
-        pred = Predictor(engine_path=args.engine)
+        yolov7_main = YOLOv7_Main(args, args.weight)
         mot_tracker = Sort(max_age=args.max_age,
                         min_hits=args.min_hits,
                         iou_threshold=args.iou_threshold) #create instance of the SORT tracker
@@ -304,7 +348,7 @@ def run(args):
             c += 1
             print(c)
 
-            results = pred.inference(frame, conf=args.det_thr, end2end=False)
+            results = yolov7_main.run(frame, args)
 
             results = np.asarray(results)
             if results != []:
@@ -364,7 +408,7 @@ def run(args):
 def parse_args():
     """Parse input arguments."""
     parser = argparse.ArgumentParser(description='SORT demo')
-    parser.add_argument('-engine', type=str, required=True)
+    parser.add_argument('-weight', type=str, required=True)
     parser.add_argument("-max_age",
                         help="Maximum number of frames to keep alive a track without associated detections.",
                         type=int, default=15)

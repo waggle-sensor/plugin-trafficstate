@@ -352,7 +352,7 @@ def run(args):
 
         if do_sampling:
             out.release()
-            plugin.upload_file("sample.mp4")
+            #plugin.upload_file("sample.mp4")
         r_class.clean_up()
         print('Tracker is cleaned up for next analysis')
 

@@ -99,7 +99,7 @@ class KalmanBoxTracker(object):
     # self.kf.Q[-1,-1] *= 0.01
     # self.kf.Q[4:,4:] *= 0.01
 
-    super().__init__(dim_x=7, dim_z=4)
+    self.kf = KalmanFilter(dim_x=7, dim_z=4)
     self.kf.F = np.eye(7, dtype=float)
     self.kf.H = np.eye(7, dtype=float)[:4]
     # This is all derived from MM optimization work

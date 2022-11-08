@@ -176,7 +176,7 @@ class YOLOv7_Main():
 
         with torch.no_grad():
             pred = self.model(image)[0]
-            pred = non_max_suppression(pred, args.conf_thres, args.iou_thres, classes=args.classes, agnostic=True)
+            pred = non_max_suppression(pred, args.det_thr, args.iou_thres, classes=args.classes, agnostic=True)
 
         return pred
 
@@ -348,10 +348,16 @@ def run(args):
             c += 1
             print(c)
 
+            frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
             results = yolov7_main.run(frame, args)
 
-            results = np.asarray(results)
+            results = np.asarray(results[0].cpu().detach())
             if results != []:
+                for result in results:
+                    result[0] = result[0] * width/640  ## x1
+                    result[1] = result[1] * height/640  ## y1
+                    result[2] = result[2] * width/640  ## x2
+                    result[3] = result[3] * height/640  ## y2
                 results[:, 2:4] += results[:, 0:2] #convert to [x1,y1,w,h] to [x1,y1,x2,y2]
                 dets = results
                 trackers = mot_tracker.update(dets)
@@ -422,7 +428,8 @@ def parse_args():
                         action='store', default='coco.names', type=str,
                         help='Labels for detection')
     parser.add_argument("-detection-threshold", dest='det_thr', type=float, default=0.25)
-
+    parser.add_argument('-iou-thres', type=float, default=0.45, help='IOU threshold for NMS')
+    parser.add_argument('--classes', nargs='+', type=int, help='filter by class: --class 0, or --class 0 2 3')
 
     parser.add_argument(
         '-stream', dest='stream',

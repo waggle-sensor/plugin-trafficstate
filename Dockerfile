@@ -1,4 +1,4 @@
-FROM waggle/plugin-base:1.1.1-ml-torch1.9.0
+FROM waggle/plugin-base:1.1.1-ml-torch1.9
 
 RUN apt-get update \
   && apt-get install -y \

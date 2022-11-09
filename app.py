@@ -338,15 +338,15 @@ def run(args):
             fourcc = cv2.VideoWriter_fourcc(*'mp4v')
             out = cv2.VideoWriter("sample.mp4", fourcc, fps, (int(width), int(height)), True)
 
-        c = 0
+        # c = 0
         while True:
             ret, frame = cap.read()
             if ret == False:
                 print('no video frame')
                 break
 
-            c += 1
-            print(c)
+            # c += 1
+            # print(c)
 
             frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
             results = yolov7_main.run(frame, args)
@@ -405,7 +405,7 @@ def run(args):
 
         if do_sampling:
             out.release()
-            #plugin.upload_file("sample.mp4")
+            plugin.upload_file("sample.mp4")
         r_class.clean_up()
         print('Tracker is cleaned up for next analysis')
 
@@ -414,22 +414,22 @@ def run(args):
 def parse_args():
     """Parse input arguments."""
     parser = argparse.ArgumentParser(description='SORT demo')
-    parser.add_argument('-weight', type=str, required=True)
-    parser.add_argument("-max_age",
+    parser.add_argument('-weight', type=str, default='model.pt')
+    parser.add_argument("-max-age",
                         help="Maximum number of frames to keep alive a track without associated detections.",
                         type=int, default=15)
-    parser.add_argument("-min_hits",
+    parser.add_argument("-min-hits",
                         help="Minimum number of associated detections before track is initialised.",
                         type=int, default=3)
-    parser.add_argument("-iou_threshold", help="Minimum IOU for match.", type=float, default=0.3)
+    parser.add_argument("-iou-threshold", help="Minimum IOU for match for Kalman Filter.", type=float, default=0.3)
 
     # Data
     parser.add_argument('-labels', dest='labels',
                         action='store', default='coco.names', type=str,
                         help='Labels for detection')
-    parser.add_argument("-detection-threshold", dest='det_thr', type=float, default=0.25)
+    parser.add_argument("-detection-thres", dest='det_thr', type=float, default=0.5)
     parser.add_argument('-iou-thres', type=float, default=0.45, help='IOU threshold for NMS')
-    parser.add_argument('--classes', nargs='+', type=int, help='filter by class: --class 0, or --class 0 2 3')
+    parser.add_argument('-classes', nargs='+', type=int, help='filter by class: -class 0, or -class 0 2 3')
 
     parser.add_argument(
         '-stream', dest='stream',

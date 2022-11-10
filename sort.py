@@ -112,7 +112,7 @@ class KalmanBoxTracker(object):
     np.fill_diagonal(self.kf.P[:4, :4], 1.0)
     np.fill_diagonal(self.kf.P[4:, 4:], 0.96)
 
-    KalmanBoxTracker.class_num = bbox[-1]
+    self.class_num = bbox[-1]
     self.kf.x[:4] = convert_bbox_to_z(bbox)
     self.time_since_update = 0
     self.id = KalmanBoxTracker.count
